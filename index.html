@@ -3,224 +3,460 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DSE Stock Screener - Detailed Analysis</title>
+    <title>DSE Advanced Stock Screener</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet>
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f0f4f8;
+            background-color: #f8fafc;
         }
         .card {
-            background-color: white;
+            background: white;
             border-radius: 0.5rem;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
         th {
+            cursor: pointer;
+            user-select: none;
             white-space: nowrap;
-            position: sticky;
-            top: 0;
-            background-color: #f8fafc;
-            z-index: 10;
         }
-        .loading-spinner {
-            border: 4px solid rgba(0,0,0,0.1);
-            border-top: 4px solid #1976D2;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
+        th:hover {
+            background-color: #f1f5f9;
         }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .sort-asc::after {
+            content: " ↑";
+        }
+        .sort-desc::after {
+            content: " ↓";
+        }
+        .chart-container {
+            height: 300px;
+        }
+        .blink {
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0.5; }
         }
     </style>
 </head>
 <body class="min-h-screen">
-    <header class="bg-blue-900 text-white shadow-lg">
-        <div class="container mx-auto px-4 py-6">
-            <h1 class="text-2xl font-bold">DSE Stock Screener</h1>
-            <p class="text-blue-200">Detailed Fundamental Analysis</p>
+    <header class="bg-blue-800 text-white shadow-lg">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <div>
+                <h1 class="text-xl font-bold">DSE Advanced Stock Screener</h1>
+                <p class="text-blue-200 text-sm">Real-time Dhaka Stock Exchange Analysis</p>
+            </div>
+            <div class="flex items-center space-x-2">
+                <span id="lastUpdate" class="text-blue-200 text-sm blink">Updating...</span>
+                <span id="liveBadge" class="bg-red-500 text-white text-xs px-2 py-1 rounded-full">LIVE</span>
+            </div>
         </div>
     </header>
 
-    <main class="container mx-auto px-4 py-8">
-        <div class="card overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticker</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">% Dir. Holdings</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ROE</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ROCE</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Debt/Equity</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Int. Coverage</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gross Margin</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Op. Margin</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Net Margin</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rev CAGR</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NP CAGR</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Div. Payout</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Overvalued</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Op. Leverage</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">P/E</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-blue-100">Total Score</th>
-                        </tr>
-                    </thead>
-                    <tbody id="stockTableBody" class="bg-white divide-y divide-gray-200">
-                        <tr>
-                            <td colspan="16" class="text-center py-8">
-                                <div class="loading-spinner"></div>
-                                <p class="mt-2 text-gray-500">Loading stock data...</p>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+    <main class="container mx-auto px-4 py-6">
+        <!-- Main Table View -->
+        <div id="tableView" class="mb-8">
+            <div class="card overflow-hidden mb-4">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('ticker')">Ticker</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('category')">Category</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('freeFloatMarketCap')">Free Float (M)</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('roe')">ROE</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('peRatio')">P/E</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('debtToEquity')">D/E</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('dividendYield')">Div Yield</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-blue-100" onclick="sortTable('totalScore')">Score</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stockTableBody" class="bg-white divide-y divide-gray-200">
+                            <tr>
+                                <td colspan="8" class="text-center py-8">
+                                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+                                    <p class="mt-2 text-gray-500">Loading stock data...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Stock View (Hidden by default) -->
+        <div id="detailView" class="hidden">
+            <div class="flex justify-between items-center mb-4">
+                <button onclick="showTableView()" class="flex items-center text-blue-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                    </svg>
+                    Back to all stocks
+                </button>
+                <h2 id="detailStockName" class="text-xl font-bold text-gray-800"></h2>
+                <div class="w-5"></div> <!-- Spacer -->
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <!-- Key Metrics Card -->
+                <div class="card p-4">
+                    <h3 class="font-medium text-gray-700 mb-3">Key Metrics</h3>
+                    <div class="space-y-2" id="keyMetrics">
+                        <!-- Filled by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Profitability Card -->
+                <div class="card p-4">
+                    <h3 class="font-medium text-gray-700 mb-3">Profitability</h3>
+                    <div class="space-y-2" id="profitabilityMetrics">
+                        <!-- Filled by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Valuation Card -->
+                <div class="card p-4">
+                    <h3 class="font-medium text-gray-700 mb-3">Valuation</h3>
+                    <div class="space-y-2" id="valuationMetrics">
+                        <!-- Filled by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div class="card p-4">
+                    <h3 class="font-medium text-gray-700 mb-3">ROE vs Debt/Equity</h3>
+                    <div class="chart-container">
+                        <canvas id="roeDebtChart"></canvas>
+                    </div>
+                </div>
+                <div class="card p-4">
+                    <h3 class="font-medium text-gray-700 mb-3">Price Performance</h3>
+                    <div class="chart-container">
+                        <canvas id="priceChart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
     </main>
 
-    <footer class="bg-blue-900 text-white py-4 mt-8">
-        <div class="container mx-auto px-4 text-center text-sm">
-            <p>DSE Stock Screener &copy; 2023 | Data updated: <span id="updateTime"></span></p>
-        </div>
-    </footer>
-
     <script>
-        // Sample data matching your second image
-        const stockData = [
-            {
-                ticker: "GP",
-                directorHoldings: 70.00,
-                roe: 22.57,
-                roce: 56.10,
-                debtToEquity: 0.41,
-                interestCoverage: 9.24,
-                grossMargin: 45.27,
-                operatingMargin: 12.02,
-                netMargin: 7.75,
-                revenueCAGR: 3.02,
-                netProfitCAGR: 0.67,
-                dividendPayout: 56.91,
-                overvalued: 7.66,
-                operatingLeverage: 0.19,
-                peRatio: 15.55,
-                totalScore: 155
-            },
-            {
-                ticker: "ACI",
-                directorHoldings: 72.91,
-                roe: 41.95,
-                roce: 36.78,
-                debtToEquity: 0.11,
-                interestCoverage: 90.59,
-                grossMargin: 50.73,
-                operatingMargin: 40.93,
-                netMargin: 19.30,
-                revenueCAGR: 11.95,
-                netProfitCAGR: 15.80,
-                dividendPayout: 60.42,
-                overvalued: 0.00,
-                operatingLeverage: 1.32,
-                peRatio: 14.74,
-                totalScore: 92
-            },
-            {
-                ticker: "BATBC",
-                directorHoldings: 90.00,
-                roe: 74.31,
-                roce: 164.10,
-                debtToEquity: 1.37,
-                interestCoverage: 12.03,
-                grossMargin: 9.35,
-                operatingMargin: 40.71,
-                netMargin: 25.31,
-                revenueCAGR: 3.79,
-                netProfitCAGR: 7.36,
-                dividendPayout: 98.70,
-                overvalued: 0.00,
-                operatingLeverage: 1.92,
-                peRatio: 9.80,
-                totalScore: 105
-            },
-            {
-                ticker: "BRACBANK",
-                directorHoldings: 60.71,
-                roe: 25.06,
-                roce: 125.07,
-                debtToEquity: 1.18,
-                interestCoverage: 7.31,
-                grossMargin: 12.34,
-                operatingMargin: 6.80,
-                netMargin: 4.68,
-                revenueCAGR: 8.69,
-                netProfitCAGR: -4.67,
-                dividendPayout: -24.21,
-                overvalued: -54.61,
-                operatingLeverage: 0.54,
-                peRatio: 16.37,
-                totalScore: 188
-            },
-            {
-                ticker: "BEXIMCO",
-                directorHoldings: 44.87,
-                roe: 19.85,
-                roce: 48.76,
-                debtToEquity: 0.33,
-                interestCoverage: 17.36,
-                grossMargin: 41.78,
-                operatingMargin: 8.95,
-                netMargin: 6.36,
-                revenueCAGR: 12.33,
-                netProfitCAGR: 13.62,
-                dividendPayout: 30.94,
-                overvalued: 0.00,
-                operatingLeverage: 1.10,
-                peRatio: 15.90,
-                totalScore: 139
-            }
-        ];
+        // Global variables
+        let allStocks = [];
+        let currentSort = { key: 'totalScore', order: 'desc' };
+        let updateInterval;
+        let roeDebtChart, priceChart;
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
-            // Set update time
-            const now = new Date();
-            document.getElementById('updateTime').textContent = now.toLocaleString();
+            initializeCharts();
+            fetchStockData();
             
-            // Render the table
-            renderStockTable();
+            // Set up auto-refresh every 5 seconds
+            updateInterval = setInterval(fetchStockData, 5000);
         });
 
+        // Fetch stock data (simulated - replace with real API call)
+        async function fetchStockData() {
+            try {
+                // In a real app, you would use:
+                // const response = await axios.get('YOUR_API_ENDPOINT');
+                // allStocks = processData(response.data);
+                
+                // Simulated data for demonstration
+                allStocks = generateSimulatedData();
+                
+                renderStockTable();
+                updateLastUpdatedTime();
+            } catch (error) {
+                console.error('Error fetching stock data:', error);
+                document.getElementById('lastUpdate').textContent = "Update failed";
+                document.getElementById('lastUpdate').classList.add('text-red-500');
+                document.getElementById('lastUpdate').classList.remove('blink');
+            }
+        }
+
+        // Process and generate simulated data
+        function generateSimulatedData() {
+            const categories = ['Bank', 'Pharma', 'Telecom', 'Fuel', 'IT', 'Food', 'Insurance', 'Textile'];
+            const stocks = [];
+            
+            // Sample DSE stocks with realistic data ranges
+            const sampleStocks = [
+                { ticker: 'GP', name: 'Grameenphone Ltd.', category: 'Telecom' },
+                { ticker: 'SQURPHARMA', name: 'Square Pharmaceuticals', category: 'Pharma' },
+                { ticker: 'BATBC', name: 'British American Tobacco', category: 'Food' },
+                { ticker: 'ACI', name: 'ACI Limited', category: 'Conglomerate' },
+                { ticker: 'BEXIMCO', name: 'BEXIMCO Ltd.', category: 'Textile' },
+                { ticker: 'RENATA', name: 'Renata Limited', category: 'Pharma' },
+                { ticker: 'ISLAMIBANK', name: 'Islami Bank Bangladesh', category: 'Bank' },
+                { ticker: 'SUMITPOWER', name: 'Summit Power', category: 'Power' },
+                { ticker: 'LANKABAFIN', name: 'LankaBangla Finance', category: 'Financial Institution' },
+                { ticker: 'OLYMPIC', name: 'Olympic Industries', category: 'Food' },
+                { ticker: 'SALVOCHEM', name: 'Salvo Chemical', category: 'Chemical' },
+                { ticker: 'BDTHAI', name: 'Bangladesh Thai Aluminium', category: 'Engineering' },
+                { ticker: 'NBL', name: 'National Bank', category: 'Bank' },
+                { ticker: 'PRIMEBANK', name: 'Prime Bank', category: 'Bank' },
+                { ticker: 'SAFKOSPINN', name: 'Safko Spinning Mills', category: 'Textile' },
+                { ticker: 'TAKAFULINS', name: 'Takaful Islami Insurance', category: 'Insurance' },
+                { ticker: 'BDCOM', name: 'BDCOM Online', category: 'IT' },
+                { ticker: 'MATINSPINN', name: 'Matin Spinning Mills', category: 'Textile' },
+                { ticker: 'PADMAOIL', name: 'Padma Oil Company', category: 'Fuel' },
+                { ticker: 'JAMUNAOIL', name: 'Jamuna Oil Company', category: 'Fuel' }
+            ];
+
+            sampleStocks.forEach(stock => {
+                stocks.push({
+                    ...stock,
+                    freeFloatMarketCap: Math.random() * 500 + 50, // 50M to 550M
+                    roe: (Math.random() * 30 + 5).toFixed(2), // 5% to 35%
+                    roce: (Math.random() * 35 + 5).toFixed(2),
+                    debtToEquity: (Math.random() * 2).toFixed(2), // 0 to 2
+                    interestCoverage: (Math.random() * 50 + 5).toFixed(2),
+                    grossMargin: (Math.random() * 40 + 10).toFixed(2), // 10% to 50%
+                    operatingMargin: (Math.random() * 30 + 5).toFixed(2),
+                    netMargin: (Math.random() * 25 + 3).toFixed(2),
+                    revenueCAGR: (Math.random() * 20 - 5).toFixed(2), // -5% to 15%
+                    netProfitCAGR: (Math.random() * 25 - 5).toFixed(2),
+                    dividendYield: (Math.random() * 8).toFixed(2), // 0% to 8%
+                    dividendPayout: (Math.random() * 100).toFixed(2),
+                    peRatio: (Math.random() * 40 + 5).toFixed(2), // 5 to 45
+                    pbRatio: (Math.random() * 5 + 0.5).toFixed(2), // 0.5 to 5.5
+                    directorHoldings: (Math.random() * 80 + 10).toFixed(2), // 10% to 90%
+                    overvalued: (Math.random() * 60 - 30).toFixed(2), // -30% to 30%
+                    operatingLeverage: (Math.random() * 3 - 1).toFixed(2), // -1 to 2
+                    totalScore: Math.floor(Math.random() * 100 + 50), // 50 to 150
+                    lastPrice: (Math.random() * 500 + 50).toFixed(2), // 50 to 550
+                    priceHistory: Array.from({length: 30}, () => (Math.random() * 100 + 200).toFixed(2))
+                });
+            });
+
+            return stocks;
+        }
+
+        // Render the main stock table
         function renderStockTable() {
             const tbody = document.getElementById('stockTableBody');
+            if (!tbody) return;
+
+            // Sort stocks
+            const sortedStocks = [...allStocks].sort((a, b) => {
+                const aVal = a[currentSort.key];
+                const bVal = b[currentSort.key];
+                
+                if (aVal === undefined || bVal === undefined) return 0;
+                if (currentSort.order === 'asc') return aVal - bVal;
+                return bVal - aVal;
+            });
+
             tbody.innerHTML = '';
             
-            stockData.forEach(stock => {
+            sortedStocks.forEach(stock => {
                 const row = document.createElement('tr');
-                row.className = 'hover:bg-gray-50';
+                row.className = 'hover:bg-gray-50 cursor-pointer';
+                row.onclick = () => showStockDetail(stock.ticker);
+                
                 row.innerHTML = `
-                    <td class="px-6 py-4 whitespace-nowrap font-medium">${stock.ticker}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">${stock.directorHoldings.toFixed(2)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">${stock.roe.toFixed(2)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">${stock.roce.toFixed(2)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">${stock.debtToEquity.toFixed(2)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">${stock.interestCoverage.toFixed(2)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">${stock.grossMargin.toFixed(2)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">${stock.operatingMargin.toFixed(2)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">${stock.netMargin.toFixed(2)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">${stock.revenueCAGR.toFixed(2)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">${stock.netProfitCAGR.toFixed(2)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">${stock.dividendPayout.toFixed(2)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">${stock.overvalued.toFixed(2)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">${stock.operatingLeverage.toFixed(2)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">${stock.peRatio.toFixed(2)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap font-bold bg-blue-50">${stock.totalScore}</td>
+                    <td class="px-4 py-3 whitespace-nowrap font-medium">${stock.ticker}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">${stock.category}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">${parseFloat(stock.freeFloatMarketCap).toFixed(2)}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">${stock.roe}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">${stock.peRatio}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">${stock.debtToEquity}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">${stock.dividendYield}%</td>
+                    <td class="px-4 py-3 whitespace-nowrap font-bold bg-blue-50">${stock.totalScore}</td>
                 `;
                 tbody.appendChild(row);
             });
+
+            // Update sort indicators
+            document.querySelectorAll('th').forEach(th => {
+                th.classList.remove('sort-asc', 'sort-desc');
+                if (th.getAttribute('onclick')?.includes(`sortTable('${currentSort.key}')`)) {
+                    th.classList.add(currentSort.order === 'asc' ? 'sort-asc' : 'sort-desc');
+                }
+            });
+        }
+
+        // Sort table by column
+        function sortTable(key) {
+            if (currentSort.key === key) {
+                currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.key = key;
+                currentSort.order = 'desc';
+            }
+            renderStockTable();
+        }
+
+        // Show detailed view for a stock
+        function showStockDetail(ticker) {
+            const stock = allStocks.find(s => s.ticker === ticker);
+            if (!stock) return;
+
+            document.getElementById('tableView').classList.add('hidden');
+            document.getElementById('detailView').classList.remove('hidden');
+            document.getElementById('detailStockName').textContent = `${stock.ticker} - ${stock.name}`;
+
+            // Update key metrics
+            document.getElementById('keyMetrics').innerHTML = `
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Category:</span>
+                    <span class="font-medium">${stock.category}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Free Float MCap:</span>
+                    <span class="font-medium">${parseFloat(stock.freeFloatMarketCap).toFixed(2)}M</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Last Price:</span>
+                    <span class="font-medium">${stock.lastPrice}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Director Holdings:</span>
+                    <span class="font-medium">${stock.directorHoldings}%</span>
+                </div>
+            `;
+
+            // Update profitability metrics
+            document.getElementById('profitabilityMetrics').innerHTML = `
+                <div class="flex justify-between">
+                    <span class="text-gray-600">ROE:</span>
+                    <span class="font-medium">${stock.roe}%</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">ROCE:</span>
+                    <span class="font-medium">${stock.roce}%</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Gross Margin:</span>
+                    <span class="font-medium">${stock.grossMargin}%</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Net Margin:</span>
+                    <span class="font-medium">${stock.netMargin}%</span>
+                </div>
+            `;
+
+            // Update valuation metrics
+            document.getElementById('valuationMetrics').innerHTML = `
+                <div class="flex justify-between">
+                    <span class="text-gray-600">P/E Ratio:</span>
+                    <span class="font-medium">${stock.peRatio}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">P/B Ratio:</span>
+                    <span class="font-medium">${stock.pbRatio}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Dividend Yield:</span>
+                    <span class="font-medium">${stock.dividendYield}%</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Total Score:</span>
+                    <span class="font-medium">${stock.totalScore}</span>
+                </div>
+            `;
+
+            // Update charts
+            updateCharts(stock);
+        }
+
+        // Show the table view
+        function showTableView() {
+            document.getElementById('tableView').classList.remove('hidden');
+            document.getElementById('detailView').classList.add('hidden');
+        }
+
+        // Initialize charts
+        function initializeCharts() {
+            // ROE vs Debt/Equity Chart
+            roeDebtChart = new Chart(
+                document.getElementById('roeDebtChart'),
+                {
+                    type: 'scatter',
+                    data: {
+                        datasets: [{
+                            label: 'Current Stock',
+                            data: [{ x: 0, y: 0 }],
+                            backgroundColor: '#3B82F6',
+                            pointRadius: 10
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                title: { display: true, text: 'Return on Equity (ROE %)' },
+                                min: 0,
+                                max: 50
+                            },
+                            y: {
+                                title: { display: true, text: 'Debt to Equity Ratio' },
+                                min: 0,
+                                max: 3
+                            }
+                        }
+                    }
+                }
+            );
+
+            // Price Performance Chart
+            priceChart = new Chart(
+                document.getElementById('priceChart'),
+                {
+                    type: 'line',
+                    data: {
+                        labels: Array.from({length: 30}, (_, i) => i+1),
+                        datasets: [{
+                            label: 'Price',
+                            data: [],
+                            borderColor: '#10B981',
+                            tension: 0.1,
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                title: { display: true, text: 'Price' }
+                            }
+                        }
+                    }
+                }
+            );
+        }
+
+        // Update charts with stock data
+        function updateCharts(stock) {
+            // Update ROE vs Debt chart
+            roeDebtChart.data.datasets = [{
+                label: stock.ticker,
+                data: [{ x: parseFloat(stock.roe), y: parseFloat(stock.debtToEquity) }],
+                backgroundColor: '#3B82F6',
+                pointRadius: 10
+            }];
+            roeDebtChart.update();
+
+            // Update price chart
+            priceChart.data.datasets[0].data = stock.priceHistory.map(parseFloat);
+            priceChart.update();
+        }
+
+        // Update the last updated time
+        function updateLastUpdatedTime() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = `Updated: ${now.toLocaleTimeString()}`;
+            document.getElementById('lastUpdate').classList.remove('text-red-500');
+            document.getElementById('lastUpdate').classList.add('blink');
         }
     </script>
 </body>
