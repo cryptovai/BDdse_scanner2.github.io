@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DSE Stock Screener - বাংলাদেশ স্টক মার্কেট বিশ্লেষণ by Adnan Sayem</title>
+    <title>DSE Stock Screener - Real-Time বাংলাদেশ স্টক মার্কেট বিশ্লেষণ</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -43,6 +43,12 @@
             background-color: #1d4ed8;
             color: white;
         }
+        .blink {
+            animation: blink-animation 1s steps(2, start) infinite;
+        }
+        @keyframes blink-animation {
+            to { visibility: hidden; }
+        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -55,7 +61,8 @@
                     </svg>
                     Refresh
                 </button>
-                <h1 class="text-xl font-bold">DSE Stock Screener</h1>
+                <h1 class="text-xl font-bold">DSE Real-Time Stock Screener</h1>
+                <span id="liveBadge" class="bg-red-500 text-white text-xs px-2 py-1 rounded-full blink">LIVE</span>
             </div>
             <div>
                 <p class="text-blue-200 text-sm">বাংলাদেশ স্টক মার্কেট বিশ্লেষণ By Adnan Sayem</p>
@@ -67,7 +74,7 @@
         <!-- Lightweight Loading Placeholder -->
         <div id="loadingPlaceholder" class="text-center py-8">
             <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-            <p class="mt-2 text-gray-500">প্রাথমিক ডেটা লোড হচ্ছে...</p>
+            <p class="mt-2 text-gray-500">রিয়েল-টাইম ডেটা লোড হচ্ছে...</p>
         </div>
 
         <!-- Sector Filter -->
@@ -88,13 +95,13 @@
                         <thead class="bg-gray-50">
                             <tr>
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('ticker')">Ticker</th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('category')">Category</th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('currentPrice')">Price (BDT)</th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('faceValue')">Face Value</th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('marketCap')">Market Cap (Cr.)</th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('peRatio')">P/E</th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-blue-100" onclick="sortTable('totalScore')">Score</th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chart</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('sector')">Sector</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('ltp')">Price (BDT)</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('change')">Change%</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('volume')">Volume</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('pe')">P/E</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-blue-100" onclick="sortTable('score')">Score</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Analysis</th>
                             </tr>
                         </thead>
                         <tbody id="stockTableBody" class="bg-white divide-y divide-gray-200">
@@ -107,95 +114,13 @@
 
         <!-- Detailed Stock View -->
         <div id="detailView" class="hidden">
-            <div class="flex justify-between items-center mb-4">
-                <button onclick="showTableView()" class="flex items-center text-blue-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clip-rule="evenodd" />
-                    </svg>
-                    সব স্টকে ফিরে যান
-                </button>
-                <h2 id="detailStockName" class="text-xl font-bold text-gray-800"></h2>
-                <div class="w-5"></div>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <!-- Key Metrics Card -->
-                <div class="card p-4">
-                    <h3 class="font-medium text-gray-700 mb-3">মূল মেট্রিক্স</h3>
-                    <div class="space-y-2" id="keyMetrics">
-                        <!-- Filled by JavaScript -->
-                    </div>
-                </div>
-
-                <!-- Growth Metrics Card -->
-                <div class="card p-4">
-                    <h3 class="font-medium text-gray-700 mb-3">গ্রোথ মেট্রিক্স</h3>
-                    <div class="space-y-2" id="growthMetrics">
-                        <!-- Filled by JavaScript -->
-                    </div>
-                </div>
-
-                <!-- Valuation Card -->
-                <div class="card p-4">
-                    <h3 class="font-medium text-gray-700 mb-3">ভ্যালুয়েশন</h3>
-                    <div class="space-y-2" id="valuationMetrics">
-                        <!-- Filled by JavaScript -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- Investor Information -->
-            <div class="card p-4 mb-6">
-                <h3 class="font-medium text-gray-700 mb-3">বিনিয়োগকারীদের জন্য গুরুত্বপূর্ণ তথ্য</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <h4 class="font-medium text-gray-600 mb-2">মৌলিক বিশ্লেষণ</h4>
-                        <ul class="list-disc list-inside text-gray-700 space-y-1">
-                            <li>কোম্পানির আর্থিক অবস্থা: বিগত ৫ বছরের আয় ও মুনাফার প্রবৃদ্ধি পর্যালোচনা করুন</li>
-                            <li>ম্যানেজমেন্টের দক্ষতা: পরিচালকদের শেয়ার হোল্ডিং ও সিদ্ধান্ত গ্রহণ প্রক্রিয়া মূল্যায়ন করুন</li>
-                            <li>শিল্পের প্রবৃদ্ধি সম্ভাবনা: সংশ্লিষ্ট সেক্টরের ভবিষ্যৎ প্রবণতা বিশ্লেষণ করুন</li>
-                            <li>প্রতিযোগিতামূলক সুবিধা: কোম্পানির বাজার অবস্থান ও অনন্য সুবিধা মূল্যায়ন করুন</li>
-                            <li>আর্থিক স্বাস্থ্য: ঋণ-ইক্যুইটি অনুপাত ও কার্যকরী মূলধন বিশ্লেষণ করুন</li>
-                        </ul>
-                    </div>
-                    <div>
-                        <h4 class="font-medium text-gray-600 mb-2">ঝুঁকি ব্যবস্থাপনা</h4>
-                        <ul class="list-disc list-inside text-gray-700 space-y-1">
-                            <li>বিনিয়োগের আগে ঝুঁকি সহনশীলতা নির্ধারণ করুন</li>
-                            <li>বিভিন্ন সেক্টরে বিনিয়োগ ছড়িয়ে দিন (ডাইভার্সিফিকেশন)</li>
-                            <li>স্টপ লস ব্যবহার করুন (সাধারণত ১০-১৫% ক্ষতির মাত্রা নির্ধারণ করুন)</li>
-                            <li>বাজারের সামগ্রিক অবস্থা পর্যবেক্ষণ করুন (বুলিশ বা বেয়ারিশ ট্রেন্ড)</li>
-                            <li>সেক্টর-নির্দিষ্ট ঝুঁকি বিবেচনা করুন (যেমন: ব্যাংকিং সেক্টরে NPL ঝুঁকি)</li>
-                            <li>ম্যাক্রো ইকোনমিক ফ্যাক্টর (সুদের হার, মুদ্রাস্ফীতি, জিডিপি প্রবৃদ্ধি) মনিটর করুন</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TradingView Link -->
-            <div class="card p-4 mb-6">
-                <h3 class="font-medium text-gray-700 mb-3">রিয়েল-টাইম চার্ট বিশ্লেষণ</h3>
-                <div id="chartDescription" class="text-gray-700 mb-3">
-                    <!-- Filled by JavaScript -->
-                </div>
-                <a id="tradingviewLink" href="#" target="_blank" class="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
-                    TradingView চার্ট দেখুন →
-                </a>
-            </div>
-
-            <!-- Analysis Summary -->
-            <div class="card p-4 mb-6">
-                <h3 class="font-medium text-gray-700 mb-3">বিশ্লেষণ ও সুপারিশ</h3>
-                <div id="analysisSummary" class="text-gray-700 bangla-text">
-                    <!-- Filled by JavaScript -->
-                </div>
-            </div>
+            <!-- ... (keep your existing detail view structure) ... -->
         </div>
     </main>
 
     <footer class="bg-blue-800 text-white py-4 mt-8">
         <div class="container mx-auto px-4 text-center text-sm">
-            <p>স্টক বিশ্লেষণ By Adnan Sayem &copy; ২০২৩ | সর্বশেষ আপডেট: <span id="updateTime"></span></p>
+            <p>এডনান সায়েমের স্টক বিশ্লেষণ &copy; ২০২৩ | সর্বশেষ আপডেট: <span id="updateTime"></span></p>
         </div>
     </footer>
 
@@ -203,147 +128,112 @@
         // Global variables
         let allStocks = [];
         let filteredStocks = [];
-        let currentSort = { key: 'totalScore', order: 'desc' };
+        let currentSort = { key: 'score', order: 'desc' };
         let currentStock = null;
         let currentSector = 'all';
+        let refreshInterval = 120000; // 2 minutes
 
-        // Initialize the application with lightweight first load
+        // DSE API Endpoints
+        const DSE_API = {
+            LIVE_DATA: "https://www.dse.com.bd/datafeed/current_price.php",
+            ALL_COMPANIES: "https://www.dse.com.bd/datafeed/all_companies.php"
+        };
+
+        // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
-            // Show loading placeholder immediately
             document.getElementById('loadingPlaceholder').classList.remove('hidden');
+            fetchStockData();
             
-            // Load minimal data first
-            setTimeout(() => {
-                fetchStockData();
-            }, 100);
+            // Auto-refresh
+            setInterval(fetchStockData, refreshInterval);
         });
 
-        // Fetch stock data (optimized)
+        // Fetch real-time stock data
         async function fetchStockData() {
             try {
-                // Show loading state
-                document.getElementById('loadingPlaceholder').classList.remove('hidden');
-                document.getElementById('tableView').classList.add('hidden');
-                document.getElementById('detailView').classList.add('hidden');
+                showLoading();
                 
-                // Simulated fast data load (replace with actual API call)
-                allStocks = generateSimulatedData();
+                // Fetch data from DSE
+                const [priceData, companyData] = await Promise.all([
+                    fetch(DSE_API.LIVE_DATA).then(res => res.json()),
+                    fetch(DSE_API.ALL_COMPANIES).then(res => res.json())
+                ]);
+
+                // Process data
+                allStocks = processRealTimeData(priceData, companyData);
                 
-                // Initialize sector filter
+                // Initialize UI
                 initSectorFilter();
-                
-                // Filter and render table
                 filterBySector(currentSector);
                 updateLastUpdatedTime();
                 
-                // Hide loading and show table
+                // Update UI
                 document.getElementById('loadingPlaceholder').classList.add('hidden');
                 document.getElementById('tableView').classList.remove('hidden');
                 document.getElementById('sectorFilter').classList.remove('hidden');
                 
             } catch (error) {
-                console.error('Error fetching stock data:', error);
-                document.getElementById('loadingPlaceholder').innerHTML = `
-                    <p class="text-red-500">ডেটা লোড করতে সমস্যা হয়েছে। Refresh বাটনে ক্লিক করুন।</p>
-                `;
+                console.error('Error fetching real-time data:', error);
+                showError("Failed to load real-time data. Trying again...");
+                setTimeout(fetchStockData, 5000); // Retry after 5 seconds
             }
         }
 
-        // Generate optimized simulated data with real DSE sectors and face values
-        function generateSimulatedData() {
-            const sectors = {
-                'Bank': { faceValue: 10, peRange: [5, 15] },
-                'Pharma': { faceValue: 10, peRange: [15, 30] },
-                'Telecom': { faceValue: 10, peRange: [10, 25] },
-                'Fuel & Power': { faceValue: 10, peRange: [8, 20] },
-                'IT': { faceValue: 10, peRange: [20, 40] },
-                'Food': { faceValue: 100, peRange: [10, 30] },
-                'Insurance': { faceValue: 10, peRange: [5, 15] },
-                'Textile': { faceValue: 10, peRange: [5, 12] },
-                'Engineering': { faceValue: 10, peRange: [5, 15] },
-                'Miscellaneous': { faceValue: 10, peRange: [5, 20] }
-            };
-
-            const stocks = [];
-            const sampleStocks = [
-                { ticker: 'GP', name: 'গ্রামীণফোন লিমিটেড', category: 'Telecom' },
-                { ticker: 'SQURPHARMA', name: 'স্কয়ার ফার্মাসিউটিক্যালস', category: 'Pharma' },
-                { ticker: 'BATBC', name: 'ব্রিটিশ আমেরিকান টোব্যাকো', category: 'Food' },
-                { ticker: 'ACI', name: 'এসি আই লিমিটেড', category: 'Pharma' },
-                { ticker: 'BEXIMCO', name: 'বেক্সিমকো লিমিটেড', category: 'Textile' },
-                { ticker: 'RENATA', name: 'রেনাটা লিমিটেড', category: 'Pharma' },
-                { ticker: 'ISLAMIBANK', name: 'ইসলামী ব্যাংক বাংলাদেশ', category: 'Bank' },
-                { ticker: 'SUMITPOWER', name: 'সামিট পাওয়ার', category: 'Fuel & Power' },
-                { ticker: 'LANKABAFIN', name: 'লাঙ্কাবাংলা ফাইন্যান্স', category: 'Bank' },
-                { ticker: 'OLYMPIC', name: 'অলিম্পিক ইন্ডাস্ট্রিজ', category: 'Food' },
-                { ticker: 'BDTHAI', name: 'বাংলাদেশ থাই অ্যালুমিনিয়াম', category: 'Engineering' },
-                { ticker: 'SALVOCHEM', name: 'সালভো কেমিক্যাল', category: 'Miscellaneous' }
-            ];
-
-            sampleStocks.forEach((stock, index) => {
-                const sectorInfo = sectors[stock.category] || sectors['Miscellaneous'];
-                const peRange = sectorInfo.peRange;
-                const peRatio = (Math.random() * (peRange[1] - peRange[0]) + peRange[0]).toFixed(2);
-                const faceValue = sectorInfo.faceValue;
-                const currentPrice = (Math.random() * 500 + 50).toFixed(2);
-                const sharesOutstanding = Math.floor(Math.random() * 50 + 5) * 1000000; // 5M to 55M shares
-                const marketCap = (currentPrice * sharesOutstanding / 10000000).toFixed(2); // In Crore BDT
+        // Process real-time DSE data
+        function processRealTimeData(priceData, companyData) {
+            return priceData.map(stock => {
+                const companyInfo = companyData.find(c => c.trading_code === stock.trading_code) || {};
                 
-                stocks.push({
-                    ...stock,
-                    faceValue: faceValue,
-                    currentPrice: parseFloat(currentPrice),
-                    marketCap: parseFloat(marketCap),
-                    sharesOutstanding: sharesOutstanding,
-                    revenueCAGR5Y: (Math.random() * 25 - 5).toFixed(2),
-                    netProfitCAGR5Y: (Math.random() * 30 - 5).toFixed(2),
-                    peRatio: parseFloat(peRatio),
-                    pbRatio: (Math.random() * 5 + 0.5).toFixed(2),
-                    roe: (Math.random() * 30 + 5).toFixed(2),
-                    roce: (Math.random() * 35 + 5).toFixed(2),
-                    debtToEquity: (Math.random() * 2).toFixed(2),
-                    dividendYield: (Math.random() * 8).toFixed(2),
-                    directorHoldings: (Math.random() * 80 + 10).toFixed(2),
-                    totalScore: Math.floor(Math.random() * 100 + 50),
-                    chartPattern: getRandomChartPattern(),
-                    technicalIndicators: getRandomTechnicalIndicators()
-                });
+                return {
+                    ticker: stock.trading_code,
+                    name: companyInfo.company_name || stock.trading_code,
+                    sector: companyInfo.sector || 'Miscellaneous',
+                    ltp: parseFloat(stock.ltp),
+                    high: parseFloat(stock.high),
+                    low: parseFloat(stock.low),
+                    close: parseFloat(stock.closep),
+                    ycp: parseFloat(stock.ycp),
+                    change: parseFloat(stock.change),
+                    changePercent: parseFloat(stock.change_percent),
+                    trade: parseInt(stock.trade),
+                    volume: parseInt(stock.volume),
+                    value: parseFloat(stock.value),
+                    pe: parseFloat(stock.pe) || calculatePeRatio(stock),
+                    score: calculateDynamicScore(stock),
+                    lastUpdated: new Date().toISOString()
+                };
             });
-
-            return stocks;
         }
 
-        // Helper function to get random chart pattern description
-        function getRandomChartPattern() {
-            const patterns = [
-                "আপট্রেন্ড চ্যানেল",
-                "ডাউনট্রেন্ড চ্যানেল",
-                "সাপোর্ট/রেজিস্ট্যান্স টেস্টিং",
-                "হেড অ্যান্ড শোল্ডারস প্যাটার্ন",
-                "ডাবল টপ/বটম ফর্মেশন",
-                "ট্রায়াঙ্গেল ব্রেকআউট"
-            ];
-            return patterns[Math.floor(Math.random() * patterns.length)];
+        // Calculate dynamic score
+        function calculateDynamicScore(stock) {
+            let score = 50; // Base score
+            
+            // Positive factors
+            if (stock.change > 0) score += 15;
+            if (stock.volume > 100000) score += 10;
+            if (stock.changePercent > 2) score += 5;
+            if (stock.pe < 15) score += 10;
+            
+            // Negative factors
+            if (stock.change < -5) score -= 10;
+            if (stock.pe > 25) score -= 5;
+            
+            return Math.max(0, Math.min(100, score));
         }
 
-        // Helper function to get random technical indicators
-        function getRandomTechnicalIndicators() {
-            const indicators = [
-                { name: "RSI", value: (Math.random() * 30 + 35).toFixed(2), status: Math.random() > 0.5 ? "ওভারবোট" : "ওভারসোল্ড" },
-                { name: "MACD", value: Math.random() > 0.5 ? "বুলিশ ক্রস" : "বেয়ারিশ ক্রস" },
-                { name: "50 DMA", value: Math.random() > 0.5 ? "প্রাইসের উপরে" : "প্রাইসের নিচে" },
-                { name: "200 DMA", value: Math.random() > 0.5 ? "প্রাইসের উপরে" : "প্রাইসের নিচে" },
-                { name: "ভলিউম", value: Math.random() > 0.5 ? "গড়ের উপরে" : "গড়ের নিচে" }
-            ];
-            return indicators;
+        // Calculate PE ratio if missing
+        function calculatePeRatio(stock) {
+            return stock.ycp ? (stock.ltp / stock.ycp).toFixed(2) : 0;
         }
 
         // Initialize sector filter buttons
         function initSectorFilter() {
             const sectorContainer = document.getElementById('sectorFilter').querySelector('div');
+            sectorContainer.innerHTML = '';
             
             // Get all unique sectors
-            const sectors = [...new Set(allStocks.map(stock => stock.category))];
+            const sectors = [...new Set(allStocks.map(stock => stock.sector))];
             
             // Add sector buttons
             sectors.forEach(sector => {
@@ -355,33 +245,7 @@
             });
         }
 
-        // Filter stocks by sector
-        function filterBySector(sector) {
-            currentSector = sector;
-            
-            // Update active button
-            document.querySelectorAll('.sector-btn').forEach(btn => {
-                btn.classList.remove('active', 'bg-blue-600', 'text-white');
-                btn.classList.add('bg-blue-100', 'text-blue-800');
-            });
-            
-            if (sector === 'all') {
-                filteredStocks = [...allStocks];
-                document.querySelector('.sector-btn').classList.add('active', 'bg-blue-600', 'text-white');
-            } else {
-                filteredStocks = allStocks.filter(stock => stock.category === sector);
-                document.querySelectorAll('.sector-btn').forEach(btn => {
-                    if (btn.textContent === sector) {
-                        btn.classList.add('active', 'bg-blue-600', 'text-white');
-                        btn.classList.remove('bg-blue-100', 'text-blue-800');
-                    }
-                });
-            }
-            
-            renderStockTable();
-        }
-
-        // Render the main stock table (optimized)
+        // Render the main stock table with real-time data
         function renderStockTable() {
             const tbody = document.getElementById('stockTableBody');
             if (!tbody) return;
@@ -400,20 +264,23 @@
             let html = '';
             
             sortedStocks.forEach(stock => {
-                const peColor = stock.peRatio < 10 ? 'text-green-600' : stock.peRatio < 20 ? 'text-yellow-600' : 'text-red-600';
+                const changeClass = stock.change >= 0 ? 'text-green-600' : 'text-red-600';
+                const peColor = stock.pe < 15 ? 'text-green-600' : stock.pe < 25 ? 'text-yellow-600' : 'text-red-600';
                 
                 html += `
                     <tr class="hover:bg-gray-50">
                         <td class="px-4 py-3 whitespace-nowrap font-medium">${stock.ticker}</td>
-                        <td class="px-4 py-3 whitespace-nowrap">${stock.category}</td>
-                        <td class="px-4 py-3 whitespace-nowrap">${stock.currentPrice.toFixed(2)}</td>
-                        <td class="px-4 py-3 whitespace-nowrap">${stock.faceValue}</td>
-                        <td class="px-4 py-3 whitespace-nowrap">${stock.marketCap.toFixed(2)}</td>
-                        <td class="px-4 py-3 whitespace-nowrap ${peColor}">${stock.peRatio.toFixed(2)}</td>
-                        <td class="px-4 py-3 whitespace-nowrap font-bold bg-blue-50">${stock.totalScore}</td>
+                        <td class="px-4 py-3 whitespace-nowrap">${stock.sector}</td>
+                        <td class="px-4 py-3 whitespace-nowrap">${stock.ltp.toFixed(2)}</td>
+                        <td class="px-4 py-3 whitespace-nowrap ${changeClass}">
+                            ${stock.change >= 0 ? '+' : ''}${stock.change} (${stock.changePercent}%)
+                        </td>
+                        <td class="px-4 py-3 whitespace-nowrap">${stock.volume.toLocaleString()}</td>
+                        <td class="px-4 py-3 whitespace-nowrap ${peColor}">${stock.pe}</td>
+                        <td class="px-4 py-3 whitespace-nowrap font-bold bg-blue-50">${stock.score}</td>
                         <td class="px-4 py-3 whitespace-nowrap">
                             <button onclick="showStockDetail('${stock.ticker}')" class="text-blue-600 hover:text-blue-800 text-sm">
-                                বিশ্লেষণ দেখুন
+                                বিশ্লেষণ
                             </button>
                         </td>
                     </tr>
@@ -431,182 +298,24 @@
             });
         }
 
-        // Sort table by column
-        function sortTable(key) {
-            if (currentSort.key === key) {
-                currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
-            } else {
-                currentSort.key = key;
-                currentSort.order = 'desc';
-            }
-            renderStockTable();
-        }
+        // ... (keep your existing helper functions like sortTable, filterBySector, etc) ...
 
-        // Show detailed view for a stock
-        function showStockDetail(ticker) {
-            currentStock = allStocks.find(s => s.ticker === ticker);
-            if (!currentStock) return;
-
+        function showLoading() {
+            document.getElementById('loadingPlaceholder').classList.remove('hidden');
             document.getElementById('tableView').classList.add('hidden');
-            document.getElementById('detailView').classList.remove('hidden');
-            document.getElementById('detailStockName').textContent = `${currentStock.ticker} - ${currentStock.name}`;
+        }
 
-            // Update key metrics
-            document.getElementById('keyMetrics').innerHTML = `
-                <div class="flex justify-between">
-                    <span class="text-gray-600">শ্রেণী:</span>
-                    <span class="font-medium">${currentStock.category}</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">বর্তমান মূল্য:</span>
-                    <span class="font-medium">${currentStock.currentPrice.toFixed(2)} TK</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">ফেস ভ্যালু:</span>
-                    <span class="font-medium">${currentStock.faceValue} TK</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">বাজার মূলধন:</span>
-                    <span class="font-medium">${currentStock.marketCap.toFixed(2)} Crore</span>
+        function showError(message) {
+            document.getElementById('loadingPlaceholder').innerHTML = `
+                <div class="bg-red-100 text-red-800 p-3 rounded">
+                    ${message}
+                    <button onclick="fetchStockData()" class="ml-2 bg-blue-500 text-white px-2 py-1 rounded text-sm">
+                        Retry Now
+                    </button>
                 </div>
             `;
-
-            // Update growth metrics
-            document.getElementById('growthMetrics').innerHTML = `
-                <div class="flex justify-between">
-                    <span class="text-gray-600">রেভিনিউ CAGR 5Y:</span>
-                    <span class="font-medium ${currentStock.revenueCAGR5Y > 10 ? 'text-green-600' : 'text-red-600'}">${currentStock.revenueCAGR5Y}%</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">নেট লাভ CAGR 5Y:</span>
-                    <span class="font-medium ${currentStock.netProfitCAGR5Y > 10 ? 'text-green-600' : 'text-red-600'}">${currentStock.netProfitCAGR5Y}%</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">ROE:</span>
-                    <span class="font-medium">${currentStock.roe}%</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">ROCE:</span>
-                    <span class="font-medium">${currentStock.roce}%</span>
-                </div>
-            `;
-
-            // Update valuation metrics
-            document.getElementById('valuationMetrics').innerHTML = `
-                <div class="flex justify-between">
-                    <span class="text-gray-600">P/E Ratio:</span>
-                    <span class="font-medium ${currentStock.peRatio < 15 ? 'text-green-600' : 'text-red-600'}">${currentStock.peRatio.toFixed(2)}</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">P/B Ratio:</span>
-                    <span class="font-medium">${currentStock.pbRatio}</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">মূল্য/ফেস ভ্যালু:</span>
-                    <span class="font-medium">${(currentStock.currentPrice / currentStock.faceValue).toFixed(2)}x</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">ডিভিডেন্ড ফলন:</span>
-                    <span class="font-medium">${currentStock.dividendYield}%</span>
-                </div>
-            `;
-
-            // Update TradingView link with proper URL format
-            document.getElementById('tradingviewLink').href = `https://www.tradingview.com/chart/?symbol=DHAKA%3A${currentStock.ticker}`;
-            
-            // Update chart description
-            updateChartDescription();
-            
-            // Update analysis summary
-            updateAnalysisSummary();
         }
 
-        // Update chart description
-        function updateChartDescription() {
-            let description = `
-                <p class="mb-2">এই স্টকটির বর্তমান টেকনিক্যাল অবস্থা:</p>
-                <ul class="list-disc list-inside mb-3">
-                    <li>চার্ট প্যাটার্ন: ${currentStock.chartPattern}</li>
-            `;
-            
-            currentStock.technicalIndicators.forEach(indicator => {
-                description += `<li>${indicator.name}: ${indicator.value}`;
-                if (indicator.status) {
-                    description += ` (${indicator.status})`;
-                }
-                description += `</li>`;
-            });
-            
-            description += `</ul><p class="mb-2">রিয়েল-টাইম চার্ট বিশ্লেষণের জন্য নিচের বাটনে ক্লিক করুন:</p>`;
-            
-            document.getElementById('chartDescription').innerHTML = description;
-        }
-
-        // Update analysis summary in Bangla
-        function updateAnalysisSummary() {
-            let summary = '';
-            
-            // Valuation analysis
-            const sectorPE = getSectorAveragePE(currentStock.category);
-            if (currentStock.peRatio < sectorPE * 0.7) {
-                summary += `<p class="mb-2">এই স্টকটি ${currentStock.category} সেক্টরের গড় P/E (${sectorPE.toFixed(2)}) এর তুলনায় কম মূল্যায়নে (${currentStock.peRatio.toFixed(2)}) লেনদেন হচ্ছে।</p>`;
-            } else if (currentStock.peRatio > sectorPE * 1.3) {
-                summary += `<p class="mb-2 text-red-600">সতর্কতা: এই স্টকটি ${currentStock.category} সেক্টরের গড় P/E (${sectorPE.toFixed(2)}) এর তুলনায় বেশি মূল্যায়নে (${currentStock.peRatio.toFixed(2)}) লেনদেন হচ্ছে।</p>`;
-            } else {
-                summary += `<p class="mb-2">এই স্টকটি ${currentStock.category} সেক্টরের গড় P/E (${sectorPE.toFixed(2)}) এর কাছাকাছি মূল্যায়নে (${currentStock.peRatio.toFixed(2)}) লেনদেন হচ্ছে।</p>`;
-            }
-            
-            // Growth analysis
-            if (currentStock.revenueCAGR5Y > 15 && currentStock.netProfitCAGR5Y > 15) {
-                summary += `<p class="mb-2">কোম্পানিটির আয় ও মুনাফা উভয়ই শক্তিশালী হারে (${currentStock.revenueCAGR5Y}% ও ${currentStock.netProfitCAGR5Y}%) বৃদ্ধি পাচ্ছে।</p>`;
-            } else if (currentStock.netProfitCAGR5Y > currentStock.revenueCAGR5Y) {
-                summary += `<p class="mb-2">মুনাফার বৃদ্ধি (${currentStock.netProfitCAGR5Y}%) আয়ের বৃদ্ধি (${currentStock.revenueCAGR5Y}%) কে ছাড়িয়ে গেছে, যা দক্ষতা বৃদ্ধি নির্দেশ করে।</p>`;
-            }
-            
-            // Face value analysis
-            const priceToFaceValue = (currentStock.currentPrice / currentStock.faceValue).toFixed(2);
-            if (priceToFaceValue > 10) {
-                summary += `<p class="mb-2">স্টকটি ফেস ভ্যালুর ${priceToFaceValue}x মূল্যে লেনদেন হচ্ছে, যা উচ্চ মূল্যায়ন নির্দেশ করতে পারে।</p>`;
-            } else if (priceToFaceValue < 3) {
-                summary += `<p class="mb-2">স্টকটি ফেস ভ্যালুর ${priceToFaceValue}x মূল্যে লেনদেন হচ্ছে, যা আকর্ষণীয় মূল্যায়ন নির্দেশ করে।</p>`;
-            }
-            
-            // Technical analysis
-            const rsi = currentStock.technicalIndicators.find(i => i.name === "RSI");
-            if (rsi && parseFloat(rsi.value) > 70) {
-                summary += `<p class="mb-2 text-red-600">টেকনিক্যাল সতর্কতা: RSI (${rsi.value}) ওভারবোট অবস্থায় রয়েছে, যা স্বল্পমেয়াদী মূল্য সংশোধনের ইঙ্গিত দিতে পারে।</p>`;
-            } else if (rsi && parseFloat(rsi.value) < 30) {
-                summary += `<p class="mb-2 text-green-600">টেকনিক্যাল সুযোগ: RSI (${rsi.value}) ওভারসোল্ড অবস্থায় রয়েছে, যা স্বল্পমেয়াদী মূল্য বৃদ্ধির ইঙ্গিত দিতে পারে।</p>`;
-            }
-            
-            // Final recommendation
-            if (currentStock.totalScore > 120) {
-                summary += `<p class="mt-4 font-medium text-green-600">সুপারিশ: এই স্টকটি আমাদের স্ক্রিনারে উচ্চ স্কোর (${currentStock.totalScore}) পেয়েছে এবং দীর্ঘমেয়াদী বিনিয়োগের জন্য উপযুক্ত বলে বিবেচিত হয়েছে।</p>`;
-            } else if (currentStock.totalScore > 80) {
-                summary += `<p class="mt-4 font-medium text-yellow-600">সুপারিশ: এই স্টকটি মাঝারি স্কোর (${currentStock.totalScore}) পেয়েছে। বিনিয়োগের পূর্বে আরও বিশ্লেষণ প্রয়োজন।</p>`;
-            } else {
-                summary += `<p class="mt-4 font-medium text-red-600">সতর্কতা: এই স্টকটি নিম্ন স্কোর (${currentStock.totalScore}) পেয়েছে। বিনিয়োগে সতর্কতা অবলম্বন করুন।</p>`;
-            }
-            
-            document.getElementById('analysisSummary').innerHTML = summary;
-        }
-
-        // Get sector average PE
-        function getSectorAveragePE(sector) {
-            const sectorStocks = allStocks.filter(stock => stock.category === sector);
-            if (sectorStocks.length === 0) return 15; // Default average
-            
-            const totalPE = sectorStocks.reduce((sum, stock) => sum + stock.peRatio, 0);
-            return totalPE / sectorStocks.length;
-        }
-
-        // Show the table view
-        function showTableView() {
-            document.getElementById('tableView').classList.remove('hidden');
-            document.getElementById('detailView').classList.add('hidden');
-        }
-
-        // Update the last updated time
         function updateLastUpdatedTime() {
             const now = new Date();
             document.getElementById('updateTime').textContent = now.toLocaleTimeString();
