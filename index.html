@@ -49,6 +49,14 @@
         @keyframes blink-animation {
             to { visibility: hidden; }
         }
+        .pulse {
+            animation: pulse-animation 2s infinite;
+        }
+        @keyframes pulse-animation {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -62,7 +70,7 @@
                     Refresh
                 </button>
                 <h1 class="text-xl font-bold">DSE Real-Time Stock Screener</h1>
-                <span id="liveBadge" class="bg-red-500 text-white text-xs px-2 py-1 rounded-full blink">LIVE</span>
+                <span id="connectionStatus" class="bg-green-500 text-white text-xs px-2 py-1 rounded-full blink">LIVE</span>
             </div>
             <div>
                 <p class="text-blue-200 text-sm">বাংলাদেশ স্টক মার্কেট বিশ্লেষণ By Adnan Sayem</p>
@@ -72,9 +80,10 @@
 
     <main class="container mx-auto px-4 py-6">
         <!-- Lightweight Loading Placeholder -->
-        <div id="loadingPlaceholder" class="text-center py-8">
+        <div id="loadingPlaceholder" class="text-center py-8 hidden">
             <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
             <p class="mt-2 text-gray-500">রিয়েল-টাইম ডেটা লোড হচ্ছে...</p>
+            <p id="retryCounter" class="text-xs text-gray-400 mt-1"></p>
         </div>
 
         <!-- Sector Filter -->
@@ -110,11 +119,20 @@
                     </table>
                 </div>
             </div>
+            <div class="text-right text-xs text-gray-500">
+                <span id="lastUpdated"></span>
+                <span id="dataSource" class="ml-2"></span>
+            </div>
+        </div>
+
+        <!-- Error Display -->
+        <div id="errorDisplay" class="hidden">
+            <!-- Filled by JavaScript -->
         </div>
 
         <!-- Detailed Stock View -->
         <div id="detailView" class="hidden">
-            <!-- ... (keep your existing detail view structure) ... -->
+            <!-- ... (your existing detail view) ... -->
         </div>
     </main>
 
@@ -132,80 +150,144 @@
         let currentStock = null;
         let currentSector = 'all';
         let refreshInterval = 120000; // 2 minutes
+        let retryCount = 0;
+        const MAX_RETRIES = 3;
+        let currentEndpointIndex = 0;
+        let autoRefreshInterval;
 
-        // DSE API Endpoints
-        const DSE_API = {
-            LIVE_DATA: "https://www.dse.com.bd/datafeed/current_price.php",
-            ALL_COMPANIES: "https://www.dse.com.bd/datafeed/all_companies.php"
-        };
+        // DSE API Endpoints with multiple fallbacks
+        const DSE_API_ENDPOINTS = [
+            { 
+                url: "https://www.dse.com.bd/datafeed/current_price.php",
+                name: "DSE Official"
+            },
+            { 
+                url: "https://dse.com.bd/datafeed/current_price.php",
+                name: "DSE Alternate"
+            },
+            { 
+                url: "https://www.dsebd.org/datafeed/current_price.php",
+                name: "DSE Mirror"
+            }
+        ];
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('loadingPlaceholder').classList.remove('hidden');
-            fetchStockData();
-            
-            // Auto-refresh
-            setInterval(fetchStockData, refreshInterval);
+            initApp();
         });
 
-        // Fetch real-time stock data
+        function initApp() {
+            showLoading();
+            setupAutoRefresh();
+            fetchStockData();
+        }
+
+        function setupAutoRefresh() {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = setInterval(fetchStockData, refreshInterval);
+        }
+
+        // Fetch real-time stock data with multiple fallbacks
         async function fetchStockData() {
             try {
                 showLoading();
                 
-                // Fetch data from DSE
+                const endpoint = DSE_API_ENDPOINTS[currentEndpointIndex];
+                document.getElementById('dataSource').textContent = `Source: ${endpoint.name}`;
+                
                 const [priceData, companyData] = await Promise.all([
-                    fetch(DSE_API.LIVE_DATA).then(res => res.json()),
-                    fetch(DSE_API.ALL_COMPANIES).then(res => res.json())
+                    fetchWithTimeout(endpoint.url, 8000).then(handleResponse),
+                    fetchWithTimeout(endpoint.url.replace('current_price', 'all_companies'), 8000)
+                        .then(handleResponse)
+                        .catch(() => ({})) // Empty fallback if company data fails
                 ]);
+
+                // Validate data
+                if (!Array.isArray(priceData)) {
+                    throw new Error("Invalid price data format");
+                }
 
                 // Process data
                 allStocks = processRealTimeData(priceData, companyData);
-                
-                // Initialize UI
-                initSectorFilter();
-                filterBySector(currentSector);
-                updateLastUpdatedTime();
+                retryCount = 0; // Reset retry counter on success
                 
                 // Update UI
-                document.getElementById('loadingPlaceholder').classList.add('hidden');
-                document.getElementById('tableView').classList.remove('hidden');
-                document.getElementById('sectorFilter').classList.remove('hidden');
+                updateUI();
+                updateConnectionStatus(true);
                 
             } catch (error) {
                 console.error('Error fetching real-time data:', error);
-                showError("Failed to load real-time data. Trying again...");
-                setTimeout(fetchStockData, 5000); // Retry after 5 seconds
+                handleDataError(error);
             }
         }
 
-        // Process real-time DSE data
-        function processRealTimeData(priceData, companyData) {
+        function handleResponse(response) {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        }
+
+        // Enhanced fetch with timeout and cache busting
+        async function fetchWithTimeout(resource, timeout = 8000) {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+            
+            try {
+                const response = await fetch(resource, { 
+                    signal: controller.signal,
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    },
+                    cache: 'no-store'
+                });
+                clearTimeout(id);
+                return response;
+            } catch (error) {
+                clearTimeout(id);
+                throw error;
+            }
+        }
+
+        // Process real-time DSE data with validation
+        function processRealTimeData(priceData, companyData = {}) {
             return priceData.map(stock => {
-                const companyInfo = companyData.find(c => c.trading_code === stock.trading_code) || {};
+                // Validate required fields
+                if (!stock.trading_code || !stock.ltp) {
+                    console.warn("Invalid stock data:", stock);
+                    return null;
+                }
+                
+                const companyInfo = Array.isArray(companyData) 
+                    ? companyData.find(c => c.trading_code === stock.trading_code) || {}
+                    : companyData[stock.trading_code] || {};
+                
+                const changePercent = parseFloat(stock.change_percent) || 
+                    (stock.ycp ? ((parseFloat(stock.ltp) - parseFloat(stock.ycp)) / parseFloat(stock.ycp) * 100 : 0);
                 
                 return {
                     ticker: stock.trading_code,
                     name: companyInfo.company_name || stock.trading_code,
                     sector: companyInfo.sector || 'Miscellaneous',
-                    ltp: parseFloat(stock.ltp),
-                    high: parseFloat(stock.high),
-                    low: parseFloat(stock.low),
-                    close: parseFloat(stock.closep),
-                    ycp: parseFloat(stock.ycp),
-                    change: parseFloat(stock.change),
-                    changePercent: parseFloat(stock.change_percent),
-                    trade: parseInt(stock.trade),
-                    volume: parseInt(stock.volume),
-                    value: parseFloat(stock.value),
+                    ltp: parseFloat(stock.ltp) || 0,
+                    high: parseFloat(stock.high) || 0,
+                    low: parseFloat(stock.low) || 0,
+                    close: parseFloat(stock.closep) || 0,
+                    ycp: parseFloat(stock.ycp) || 0,
+                    change: parseFloat(stock.change) || 0,
+                    changePercent: changePercent,
+                    trade: parseInt(stock.trade) || 0,
+                    volume: parseInt(stock.volume) || 0,
+                    value: parseFloat(stock.value) || 0,
                     pe: parseFloat(stock.pe) || calculatePeRatio(stock),
                     score: calculateDynamicScore(stock),
                     lastUpdated: new Date().toISOString()
                 };
-            });
+            }).filter(stock => stock !== null); // Filter out invalid entries
         }
 
-        // Calculate dynamic score
+        // Calculate dynamic score based on multiple factors
         function calculateDynamicScore(stock) {
             let score = 50; // Base score
             
@@ -227,6 +309,93 @@
             return stock.ycp ? (stock.ltp / stock.ycp).toFixed(2) : 0;
         }
 
+        // Improved error handling
+        function handleDataError(error) {
+            retryCount++;
+            
+            if (retryCount <= MAX_RETRIES) {
+                // Try next endpoint
+                currentEndpointIndex = (currentEndpointIndex + 1) % DSE_API_ENDPOINTS.length;
+                
+                const retryIn = Math.min(3000 * retryCount, 15000); // Exponential backoff max 15s
+                showError(`Failed to load data (Attempt ${retryCount}/${MAX_RETRIES}). Retrying in ${retryIn/1000} seconds...`);
+                
+                setTimeout(() => {
+                    fetchStockData();
+                }, retryIn);
+            } else {
+                showError("Could not connect to DSE servers. Please check your internet connection and try again later.");
+                updateConnectionStatus(false);
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusElement = document.getElementById('connectionStatus');
+            if (connected) {
+                statusElement.classList.remove('bg-red-500', 'bg-gray-500', 'pulse');
+                statusElement.classList.add('bg-green-500', 'blink');
+                statusElement.textContent = "LIVE";
+            } else {
+                statusElement.classList.remove('bg-green-500', 'blink');
+                statusElement.classList.add('bg-red-500', 'pulse');
+                statusElement.textContent = "OFFLINE";
+            }
+        }
+
+        function updateUI() {
+            initSectorFilter();
+            filterBySector(currentSector);
+            updateLastUpdatedTime();
+            
+            document.getElementById('loadingPlaceholder').classList.add('hidden');
+            document.getElementById('errorDisplay').classList.add('hidden');
+            document.getElementById('tableView').classList.remove('hidden');
+            document.getElementById('sectorFilter').classList.remove('hidden');
+        }
+
+        function showLoading() {
+            const loadingDiv = document.getElementById('loadingPlaceholder');
+            loadingDiv.classList.remove('hidden');
+            loadingDiv.innerHTML = `
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                <p class="mt-2 text-gray-500">রিয়েল-টাইম ডেটা লোড হচ্ছে...</p>
+                <p id="retryCounter" class="text-xs text-gray-400 mt-1">Attempt ${retryCount + 1}/${MAX_RETRIES}</p>
+            `;
+            
+            document.getElementById('tableView').classList.add('hidden');
+            document.getElementById('errorDisplay').classList.add('hidden');
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorDisplay');
+            errorDiv.classList.remove('hidden');
+            errorDiv.innerHTML = `
+                <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4">
+                    <div class="flex items-center">
+                        <svg class="h-5 w-5 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        <strong>Error:</strong>
+                    </div>
+                    <p class="mt-1">${message}</p>
+                    <button onclick="forceRetry()" class="mt-2 bg-blue-500 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Retry Now
+                    </button>
+                </div>
+            `;
+            
+            document.getElementById('loadingPlaceholder').classList.add('hidden');
+        }
+
+        function forceRetry() {
+            retryCount = 0;
+            currentEndpointIndex = 0;
+            fetchStockData();
+        }
+
         // Initialize sector filter buttons
         function initSectorFilter() {
             const sectorContainer = document.getElementById('sectorFilter').querySelector('div');
@@ -243,6 +412,32 @@
                 btn.onclick = () => filterBySector(sector);
                 sectorContainer.appendChild(btn);
             });
+        }
+
+        // Filter stocks by sector
+        function filterBySector(sector) {
+            currentSector = sector;
+            
+            // Update active button
+            document.querySelectorAll('.sector-btn').forEach(btn => {
+                btn.classList.remove('active', 'bg-blue-600', 'text-white');
+                btn.classList.add('bg-blue-100', 'text-blue-800');
+            });
+            
+            if (sector === 'all') {
+                filteredStocks = [...allStocks];
+                document.querySelector('.sector-btn').classList.add('active', 'bg-blue-600', 'text-white');
+            } else {
+                filteredStocks = allStocks.filter(stock => stock.sector === sector);
+                document.querySelectorAll('.sector-btn').forEach(btn => {
+                    if (btn.textContent === sector) {
+                        btn.classList.add('active', 'bg-blue-600', 'text-white');
+                        btn.classList.remove('bg-blue-100', 'text-blue-800');
+                    }
+                });
+            }
+            
+            renderStockTable();
         }
 
         // Render the main stock table with real-time data
@@ -266,6 +461,7 @@
             sortedStocks.forEach(stock => {
                 const changeClass = stock.change >= 0 ? 'text-green-600' : 'text-red-600';
                 const peColor = stock.pe < 15 ? 'text-green-600' : stock.pe < 25 ? 'text-yellow-600' : 'text-red-600';
+                const scoreColor = stock.score > 75 ? 'text-green-600' : stock.score > 50 ? 'text-yellow-600' : 'text-red-600';
                 
                 html += `
                     <tr class="hover:bg-gray-50">
@@ -273,11 +469,11 @@
                         <td class="px-4 py-3 whitespace-nowrap">${stock.sector}</td>
                         <td class="px-4 py-3 whitespace-nowrap">${stock.ltp.toFixed(2)}</td>
                         <td class="px-4 py-3 whitespace-nowrap ${changeClass}">
-                            ${stock.change >= 0 ? '+' : ''}${stock.change} (${stock.changePercent}%)
+                            ${stock.change >= 0 ? '+' : ''}${stock.change.toFixed(2)} (${stock.changePercent.toFixed(2)}%)
                         </td>
                         <td class="px-4 py-3 whitespace-nowrap">${stock.volume.toLocaleString()}</td>
                         <td class="px-4 py-3 whitespace-nowrap ${peColor}">${stock.pe}</td>
-                        <td class="px-4 py-3 whitespace-nowrap font-bold bg-blue-50">${stock.score}</td>
+                        <td class="px-4 py-3 whitespace-nowrap font-bold ${scoreColor}">${stock.score}</td>
                         <td class="px-4 py-3 whitespace-nowrap">
                             <button onclick="showStockDetail('${stock.ticker}')" class="text-blue-600 hover:text-blue-800 text-sm">
                                 বিশ্লেষণ
@@ -296,29 +492,145 @@
                     th.classList.add(currentSort.order === 'asc' ? 'sort-asc' : 'sort-desc');
                 }
             });
+            
+            // Update last updated time
+            document.getElementById('lastUpdated').textContent = `Last update: ${new Date().toLocaleTimeString()}`;
         }
 
-        // ... (keep your existing helper functions like sortTable, filterBySector, etc) ...
-
-        function showLoading() {
-            document.getElementById('loadingPlaceholder').classList.remove('hidden');
-            document.getElementById('tableView').classList.add('hidden');
-        }
-
-        function showError(message) {
-            document.getElementById('loadingPlaceholder').innerHTML = `
-                <div class="bg-red-100 text-red-800 p-3 rounded">
-                    ${message}
-                    <button onclick="fetchStockData()" class="ml-2 bg-blue-500 text-white px-2 py-1 rounded text-sm">
-                        Retry Now
-                    </button>
-                </div>
-            `;
+        // Sort table by column
+        function sortTable(key) {
+            if (currentSort.key === key) {
+                currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.key = key;
+                currentSort.order = 'desc';
+            }
+            renderStockTable();
         }
 
         function updateLastUpdatedTime() {
             const now = new Date();
             document.getElementById('updateTime').textContent = now.toLocaleTimeString();
+        }
+
+        // Show detailed view for a stock
+        function showStockDetail(ticker) {
+            currentStock = allStocks.find(s => s.ticker === ticker);
+            if (!currentStock) return;
+
+            document.getElementById('tableView').classList.add('hidden');
+            document.getElementById('detailView').classList.remove('hidden');
+            document.getElementById('detailStockName').textContent = `${currentStock.ticker} - ${currentStock.name}`;
+
+            // Update key metrics
+            document.getElementById('keyMetrics').innerHTML = `
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Sector:</span>
+                    <span class="font-medium">${currentStock.sector}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Last Trade Price:</span>
+                    <span class="font-medium">${currentStock.ltp.toFixed(2)} TK</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Yesterday's Close:</span>
+                    <span class="font-medium">${currentStock.ycp.toFixed(2)} TK</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Change:</span>
+                    <span class="font-medium ${currentStock.change >= 0 ? 'text-green-600' : 'text-red-600'}">
+                        ${currentStock.change >= 0 ? '+' : ''}${currentStock.change.toFixed(2)} (${currentStock.changePercent.toFixed(2)}%)
+                    </span>
+                </div>
+            `;
+
+            // Update growth metrics
+            document.getElementById('growthMetrics').innerHTML = `
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Today's High:</span>
+                    <span class="font-medium">${currentStock.high.toFixed(2)}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Today's Low:</span>
+                    <span class="font-medium">${currentStock.low.toFixed(2)}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Volume:</span>
+                    <span class="font-medium">${currentStock.volume.toLocaleString()}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Trades:</span>
+                    <span class="font-medium">${currentStock.trade.toLocaleString()}</span>
+                </div>
+            `;
+
+            // Update valuation metrics
+            document.getElementById('valuationMetrics').innerHTML = `
+                <div class="flex justify-between">
+                    <span class="text-gray-600">P/E Ratio:</span>
+                    <span class="font-medium ${currentStock.pe < 15 ? 'text-green-600' : currentStock.pe < 25 ? 'text-yellow-600' : 'text-red-600'}">
+                        ${currentStock.pe}
+                    </span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Score:</span>
+                    <span class="font-medium ${currentStock.score > 75 ? 'text-green-600' : currentStock.score > 50 ? 'text-yellow-600' : 'text-red-600'}">
+                        ${currentStock.score}/100
+                    </span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Last Updated:</span>
+                    <span class="font-medium">${new Date(currentStock.lastUpdated).toLocaleTimeString()}</span>
+                </div>
+            `;
+
+            // Update TradingView link
+            document.getElementById('tradingviewLink').href = `https://www.tradingview.com/chart/?symbol=DHAKA%3A${currentStock.ticker}`;
+            
+            // Update analysis summary
+            updateAnalysisSummary();
+        }
+
+        function updateAnalysisSummary() {
+            let summary = '';
+            
+            // Valuation analysis
+            if (currentStock.pe < 10) {
+                summary += `<p class="mb-2">This stock appears undervalued with a P/E ratio of ${currentStock.pe} (below 10).</p>`;
+            } else if (currentStock.pe > 25) {
+                summary += `<p class="mb-2 text-red-600">Caution: This stock appears overvalued with a P/E ratio of ${currentStock.pe} (above 25).</p>`;
+            } else {
+                summary += `<p class="mb-2">This stock has a reasonable valuation with a P/E ratio of ${currentStock.pe}.</p>`;
+            }
+            
+            // Price movement analysis
+            if (currentStock.changePercent > 3) {
+                summary += `<p class="mb-2 text-green-600">Strong positive momentum: Up ${currentStock.changePercent.toFixed(2)}% today.</p>`;
+            } else if (currentStock.changePercent < -3) {
+                summary += `<p class="mb-2 text-red-600">Negative momentum: Down ${Math.abs(currentStock.changePercent).toFixed(2)}% today.</p>`;
+            }
+            
+            // Volume analysis
+            if (currentStock.volume > 500000) {
+                summary += `<p class="mb-2">High trading volume (${currentStock.volume.toLocaleString()}) indicates strong investor interest.</p>`;
+            }
+            
+            // Final recommendation
+            if (currentStock.score > 80) {
+                summary += `<p class="mt-4 font-medium text-green-600">Recommendation: Strong buy candidate (Score: ${currentStock.score}/100)</p>`;
+            } else if (currentStock.score > 60) {
+                summary += `<p class="mt-4 font-medium text-yellow-600">Recommendation: Potential buy (Score: ${currentStock.score}/100)</p>`;
+            } else {
+                summary += `<p class="mt-4 font-medium text-red-600">Recommendation: Caution advised (Score: ${currentStock.score}/100)</p>`;
+            }
+            
+            document.getElementById('analysisSummary').innerHTML = summary;
+        }
+
+        // Show the table view
+        function showTableView() {
+            document.getElementById('tableView').classList.remove('hidden');
+            document.getElementById('detailView').classList.add('hidden');
         }
     </script>
 </body>
