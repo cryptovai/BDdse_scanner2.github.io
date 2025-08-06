@@ -36,21 +36,28 @@
             transition: all 0.3s ease;
         }
         .connection-live {
-            background-color: #10B981; /* Green */
+            background-color: #10B981;
         }
         .connection-closed {
-            background-color: #6B7280; /* Gray */
+            background-color: #6B7280;
         }
         .connection-offline {
-            background-color: #EF4444; /* Red */
+            background-color: #EF4444;
         }
         .market-open {
-            background-color: #D1FAE5; /* Light green */
-            color: #065F46; /* Dark green */
+            background-color: #D1FAE5;
+            color: #065F46;
         }
         .market-closed {
-            background-color: #F3F4F6; /* Light gray */
-            color: #4B5563; /* Dark gray */
+            background-color: #F3F4F6;
+            color: #4B5563;
+        }
+        .skeleton-loader {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
     </style>
 </head>
@@ -77,10 +84,12 @@
         <!-- Market Status Banner -->
         <div id="marketStatusBanner" class="rounded-lg p-3 text-center font-medium mb-4 hidden"></div>
 
-        <!-- Loading Placeholder -->
-        <div id="loadingPlaceholder" class="text-center py-8 hidden">
-            <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-            <p class="mt-2 text-gray-500">Loading market data...</p>
+        <!-- Loading Placeholder with Skeleton UI -->
+        <div id="loadingPlaceholder" class="space-y-4">
+            <div class="skeleton-loader h-8 w-1/3 bg-gray-300 rounded"></div>
+            <div class="skeleton-loader h-6 w-full bg-gray-200 rounded"></div>
+            <div class="skeleton-loader h-64 w-full bg-gray-200 rounded"></div>
+            <div class="skeleton-loader h-4 w-1/4 bg-gray-200 rounded"></div>
         </div>
 
         <!-- Sector Filter -->
@@ -89,7 +98,6 @@
                 <button onclick="filterBySector('all')" class="sector-btn active bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
                     All Sectors
                 </button>
-                <!-- Filled by JavaScript -->
             </div>
         </div>
 
@@ -133,7 +141,6 @@
         let allStocks = [];
         let filteredStocks = [];
         let currentSort = { key: 'score', order: 'desc' };
-        let currentStock = null;
         let currentSector = 'all';
         const refreshInterval = 120000; // 2 minutes
         let retryCount = 0;
@@ -142,6 +149,8 @@
         let autoRefreshInterval;
         let isMarketOpen = true;
         let lastSuccessfulData = null;
+        const CACHE_KEY = 'dse_stock_data';
+        const CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes cache
 
         // DSE API Endpoints
         const DSE_API_ENDPOINTS = [
@@ -188,9 +197,40 @@
         }
 
         function initApp() {
-            showLoading();
+            // Try to load cached data first for instant display
+            const cachedData = getCachedData();
+            if (cachedData) {
+                processMarketData(cachedData);
+            }
+            
             setupAutoRefresh();
             fetchStockData();
+        }
+
+        function getCachedData() {
+            try {
+                const cached = localStorage.getItem(CACHE_KEY);
+                if (!cached) return null;
+                
+                const { data, timestamp } = JSON.parse(cached);
+                if (Date.now() - timestamp > CACHE_EXPIRY) return null;
+                
+                return data;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function cacheData(data) {
+            try {
+                const cache = {
+                    data: data,
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+            } catch (e) {
+                console.error('Caching failed:', e);
+            }
         }
 
         function setupAutoRefresh() {
@@ -210,19 +250,36 @@
 
         async function fetchStockData() {
             try {
-                showLoading();
+                // Show loading state only if we don't have cached data
+                if (!getCachedData()) {
+                    showLoading();
+                }
                 
                 const endpoint = DSE_API_ENDPOINTS[currentEndpointIndex];
                 document.getElementById('dataSource').textContent = `Source: DSE ${currentEndpointIndex + 1}`;
                 
-                const response = await fetchWithTimeout(endpoint, 5000);
+                // Use cache-first strategy when market is closed
+                if (!isMarketOpen && getCachedData()) {
+                    processMarketData(getCachedData());
+                    return;
+                }
+                
+                const response = await fetchWithTimeout(endpoint, {
+                    timeout: 3000, // Shorter timeout
+                    cache: 'no-cache'
+                });
+                
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                
                 const data = await response.json();
                 
                 if (!Array.isArray(data)) {
                     throw new Error("Invalid data format received");
                 }
                 
+                // Process and cache the data
                 processMarketData(data);
+                cacheData(data);
                 retryCount = 0;
                 
             } catch (error) {
@@ -232,46 +289,56 @@
         }
 
         function processMarketData(priceData) {
-            allStocks = priceData.map(stock => {
-                const changePercent = stock.change_percent || 
-                    (stock.ycp ? ((stock.ltp - stock.ycp) / stock.ycp * 100) : 0);
-                
-                return {
-                    ticker: stock.trading_code,
-                    name: stock.trading_code, // Can be enhanced with company names
-                    sector: 'General', // Can be enhanced with actual sectors
-                    ltp: parseFloat(stock.ltp) || 0,
-                    high: parseFloat(stock.high) || 0,
-                    low: parseFloat(stock.low) || 0,
-                    close: parseFloat(stock.closep) || 0,
-                    ycp: parseFloat(stock.ycp) || 0,
-                    change: parseFloat(stock.change) || 0,
-                    changePercent: parseFloat(changePercent) || 0,
-                    volume: parseInt(stock.volume) || 0,
-                    pe: parseFloat(stock.pe) || 0,
-                    score: calculateDynamicScore(stock),
-                    lastUpdated: new Date().toISOString()
+            // Use web worker if available for heavy processing
+            if (window.Worker) {
+                const worker = new Worker('dataProcessor.js');
+                worker.postMessage(priceData);
+                worker.onmessage = function(e) {
+                    allStocks = e.data;
+                    lastSuccessfulData = allStocks;
+                    updateUI();
+                    updateConnectionStatus(isMarketOpen ? 'live' : 'closed');
+                    worker.terminate();
                 };
-            });
-            
-            lastSuccessfulData = allStocks;
-            updateUI();
-            updateConnectionStatus(isMarketOpen ? 'live' : 'closed');
+            } else {
+                // Fallback to main thread processing
+                allStocks = priceData.map(stock => {
+                    const changePercent = stock.change_percent || 
+                        (stock.ycp ? ((stock.ltp - stock.ycp) / stock.ycp * 100) : 0);
+                    
+                    return {
+                        ticker: stock.trading_code,
+                        name: stock.trading_code,
+                        sector: 'General',
+                        ltp: parseFloat(stock.ltp) || 0,
+                        high: parseFloat(stock.high) || 0,
+                        low: parseFloat(stock.low) || 0,
+                        close: parseFloat(stock.closep) || 0,
+                        ycp: parseFloat(stock.ycp) || 0,
+                        change: parseFloat(stock.change) || 0,
+                        changePercent: parseFloat(changePercent) || 0,
+                        volume: parseInt(stock.volume) || 0,
+                        pe: parseFloat(stock.pe) || 0,
+                        score: calculateDynamicScore(stock),
+                        lastUpdated: new Date().toISOString()
+                    };
+                });
+                
+                lastSuccessfulData = allStocks;
+                updateUI();
+                updateConnectionStatus(isMarketOpen ? 'live' : 'closed');
+            }
         }
 
         function calculateDynamicScore(stock) {
-            let score = 50; // Base score
-            
-            // Positive factors
+            // Simplified scoring for performance
+            let score = 50;
             if (stock.change > 0) score += 15;
             if (stock.volume > 100000) score += 10;
             if (stock.changePercent > 2) score += 5;
             if (stock.pe < 15) score += 10;
-            
-            // Negative factors
             if (stock.change < -5) score -= 10;
             if (stock.pe > 25) score -= 5;
-            
             return Math.max(0, Math.min(100, score));
         }
 
@@ -343,6 +410,7 @@
 
         function forceRetry() {
             retryCount = 0;
+            currentEndpointIndex = (currentEndpointIndex + 1) % DSE_API_ENDPOINTS.length;
             fetchStockData();
         }
 
@@ -350,7 +418,7 @@
             const sectorContainer = document.getElementById('sectorFilter').querySelector('div');
             sectorContainer.innerHTML = '';
             
-            // Simplified sector filtering - can be enhanced with actual sectors
+            // Simplified sector filtering
             const sectors = ['All', 'Bank', 'Pharma', 'Fuel & Power', 'IT'];
             
             sectors.forEach(sector => {
@@ -376,7 +444,9 @@
                 filteredStocks = [...allStocks];
                 document.querySelector('.sector-btn').classList.add('active', 'bg-blue-600', 'text-white');
             } else {
-                filteredStocks = allStocks; // Simplified - would filter by actual sector if data available
+                filteredStocks = allStocks.filter(stock => 
+                    stock.sector.toLowerCase().includes(sector.toLowerCase())
+                );
                 document.querySelectorAll('.sector-btn').forEach(btn => {
                     if (btn.textContent === sector) {
                         btn.classList.add('active', 'bg-blue-600', 'text-white');
@@ -389,7 +459,9 @@
 
         function renderStockTable() {
             const tbody = document.getElementById('stockTableBody');
-            tbody.innerHTML = '';
+            
+            // Use document fragment for better performance
+            const fragment = document.createDocumentFragment();
             
             const sortedStocks = [...filteredStocks].sort((a, b) => {
                 const aVal = a[currentSort.key];
@@ -397,7 +469,10 @@
                 return currentSort.order === 'asc' ? aVal - bVal : bVal - aVal;
             });
             
-            sortedStocks.forEach(stock => {
+            // Limit initial rendering to 50 items for better performance
+            const stocksToRender = sortedStocks.slice(0, 50);
+            
+            stocksToRender.forEach(stock => {
                 const changeClass = stock.change >= 0 ? 'text-green-600' : 'text-red-600';
                 const peColor = stock.pe < 15 ? 'text-green-600' : stock.pe < 25 ? 'text-yellow-600' : 'text-red-600';
                 const scoreColor = stock.score > 75 ? 'text-green-600' : stock.score > 50 ? 'text-yellow-600' : 'text-red-600';
@@ -420,8 +495,52 @@
                         </button>
                     </td>
                 `;
-                tbody.appendChild(row);
+                fragment.appendChild(row);
             });
+            
+            // Clear and append in one operation
+            tbody.innerHTML = '';
+            tbody.appendChild(fragment);
+            
+            // Add lazy loading for remaining items
+            if (sortedStocks.length > 50) {
+                setTimeout(() => {
+                    renderRemainingStocks(sortedStocks.slice(50));
+                }, 100);
+            }
+        }
+
+        function renderRemainingStocks(stocks) {
+            const tbody = document.getElementById('stockTableBody');
+            const fragment = document.createDocumentFragment();
+            
+            stocks.forEach(stock => {
+                const changeClass = stock.change >= 0 ? 'text-green-600' : 'text-red-600';
+                const peColor = stock.pe < 15 ? 'text-green-600' : stock.pe < 25 ? 'text-yellow-600' : 'text-red-600';
+                const scoreColor = stock.score > 75 ? 'text-green-600' : stock.score > 50 ? 'text-yellow-600' : 'text-red-600';
+                
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50';
+                row.innerHTML = `
+                    <td class="px-4 py-3 whitespace-nowrap font-medium">${stock.ticker}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">${stock.sector}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">${stock.ltp.toFixed(2)}</td>
+                    <td class="px-4 py-3 whitespace-nowrap ${changeClass}">
+                        ${stock.change >= 0 ? '+' : ''}${stock.change.toFixed(2)} (${stock.changePercent.toFixed(2)}%)
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">${stock.volume.toLocaleString()}</td>
+                    <td class="px-4 py-3 whitespace-nowrap ${peColor}">${stock.pe.toFixed(2)}</td>
+                    <td class="px-4 py-3 whitespace-nowrap font-bold ${scoreColor}">${stock.score}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        <button onclick="showStockDetail('${stock.ticker}')" class="text-blue-600 hover:text-blue-800 text-sm">
+                            Analyze
+                        </button>
+                    </td>
+                `;
+                fragment.appendChild(row);
+            });
+            
+            tbody.appendChild(fragment);
         }
 
         function sortTable(key) {
@@ -434,20 +553,26 @@
             renderStockTable();
         }
 
-        async function fetchWithTimeout(resource, timeout = 5000) {
+        async function fetchWithTimeout(resource, options = {}) {
+            const { timeout = 3000 } = options;
+            
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
             
-            const response = await fetch(resource, {
-                signal: controller.signal,
-                cache: 'no-store'
-            });
-            clearTimeout(id);
-            return response;
+            try {
+                const response = await fetch(resource, {
+                    ...options,
+                    signal: controller.signal
+                });
+                clearTimeout(id);
+                return response;
+            } catch (error) {
+                clearTimeout(id);
+                throw error;
+            }
         }
 
         function showStockDetail(ticker) {
-            // Implementation for detailed view would go here
             alert(`Detailed analysis for ${ticker} would appear here`);
         }
     </script>
