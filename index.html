@@ -32,37 +32,25 @@
         .sort-desc::after {
             content: " ↓";
         }
-        .bangla-text {
-            font-family: 'Helvetica', 'Arial', sans-serif;
-        }
-        .sector-btn {
-            transition: all 0.2s;
-        }
-        .sector-btn:hover {
-            transform: translateY(-1px);
-        }
-        .sector-btn.active {
-            background-color: #1d4ed8;
-            color: white;
-        }
         .connection-status {
             transition: all 0.3s ease;
         }
         .connection-live {
-            background-color: #10B981;
-            animation: pulse 2s infinite;
+            background-color: #10B981; /* Green */
         }
         .connection-closed {
-            background-color: #6B7280;
+            background-color: #6B7280; /* Gray */
         }
         .connection-offline {
-            background-color: #EF4444;
-            animation: pulse 2s infinite;
+            background-color: #EF4444; /* Red */
         }
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.7; }
-            100% { opacity: 1; }
+        .market-open {
+            background-color: #D1FAE5; /* Light green */
+            color: #065F46; /* Dark green */
+        }
+        .market-closed {
+            background-color: #F3F4F6; /* Light gray */
+            color: #4B5563; /* Dark gray */
         }
     </style>
 </head>
@@ -76,7 +64,7 @@
                     </svg>
                     Refresh
                 </button>
-                <h1 class="text-xl font-bold">DSE Real-Time Stock Screener</h1>
+                <h1 class="text-xl font-bold">DSE Stock Screener</h1>
                 <span id="connectionStatus" class="connection-status text-white text-xs px-2 py-1 rounded-full"></span>
             </div>
             <div>
@@ -86,15 +74,14 @@
     </header>
 
     <main class="container mx-auto px-4 py-6">
+        <!-- Market Status Banner -->
+        <div id="marketStatusBanner" class="rounded-lg p-3 text-center font-medium mb-4 hidden"></div>
+
         <!-- Loading Placeholder -->
         <div id="loadingPlaceholder" class="text-center py-8 hidden">
             <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
             <p class="mt-2 text-gray-500">Loading market data...</p>
-            <p id="retryCounter" class="text-xs text-gray-400 mt-1"></p>
         </div>
-
-        <!-- Market Status Banner -->
-        <div id="marketStatusBanner" class="hidden mb-4 rounded-lg p-3 text-center font-medium"></div>
 
         <!-- Sector Filter -->
         <div id="sectorFilter" class="hidden mb-4">
@@ -135,9 +122,9 @@
             </div>
         </div>
 
-        <!-- Detailed Stock View -->
-        <div id="detailView" class="hidden">
-            <!-- ... (same detail view as before) ... -->
+        <!-- Error Display -->
+        <div id="errorDisplay" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4">
+            <!-- Filled by JavaScript -->
         </div>
     </main>
 
@@ -158,20 +145,9 @@
 
         // DSE API Endpoints
         const DSE_API_ENDPOINTS = [
-            { 
-                url: "https://www.dse.com.bd/datafeed/current_price.php",
-                name: "DSE Official"
-            },
-            { 
-                url: "https://dse.com.bd/datafeed/current_price.php", 
-                name: "DSE Alternate" 
-            }
+            "https://www.dse.com.bd/datafeed/current_price.php",
+            "https://dse.com.bd/datafeed/current_price.php"
         ];
-
-        // Market hours (9:00 AM to 2:30 PM Bangladesh time)
-        const MARKET_OPEN_HOUR = 9;
-        const MARKET_CLOSE_HOUR = 14;
-        const MARKET_CLOSE_MINUTE = 30;
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
@@ -184,13 +160,15 @@
             const bangladeshTime = new Date(now.getTime() + (6 * 60 * 60 * 1000)); // UTC+6
             const currentHour = bangladeshTime.getHours();
             const currentMinute = bangladeshTime.getMinutes();
+            const dayOfWeek = bangladeshTime.getDay();
             
+            // Market hours: Sunday-Thursday 9:00 AM to 2:30 PM Bangladesh time
             isMarketOpen = !(
-                bangladeshTime.getDay() === 5 || // Friday
-                bangladeshTime.getDay() === 6 || // Saturday
-                currentHour < MARKET_OPEN_HOUR ||
-                (currentHour === MARKET_CLOSE_HOUR && currentMinute >= MARKET_CLOSE_MINUTE) ||
-                currentHour > MARKET_CLOSE_HOUR
+                dayOfWeek === 5 || // Friday
+                dayOfWeek === 6 || // Saturday
+                currentHour < 9 || // Before 9 AM
+                (currentHour === 14 && currentMinute >= 30) || // After 2:30 PM
+                currentHour > 14 // After 2:59 PM
             );
             
             updateMarketStatusBanner();
@@ -198,16 +176,14 @@
 
         function updateMarketStatusBanner() {
             const banner = document.getElementById('marketStatusBanner');
+            banner.classList.remove('hidden', 'market-open', 'market-closed');
+            
             if (isMarketOpen) {
-                banner.classList.remove('bg-gray-100', 'text-gray-800');
-                banner.classList.add('bg-green-100', 'text-green-800');
+                banner.classList.add('market-open');
                 banner.textContent = "Market is OPEN - Live prices updating";
-                banner.classList.remove('hidden');
             } else {
-                banner.classList.remove('bg-green-100', 'text-green-800');
-                banner.classList.add('bg-gray-100', 'text-gray-800');
+                banner.classList.add('market-closed');
                 banner.textContent = "Market is CLOSED - Showing last available prices";
-                banner.classList.remove('hidden');
             }
         }
 
@@ -224,41 +200,30 @@
                 updateConnectionStatus('live');
             } else {
                 updateConnectionStatus('closed');
+                if (lastSuccessfulData) {
+                    useLastAvailableData();
+                } else {
+                    fetchStockData(); // Try to get data at least once
+                }
             }
         }
 
-        // Main data fetching function
         async function fetchStockData() {
             try {
-                checkMarketStatus();
-                if (!isMarketOpen && lastSuccessfulData) {
-                    useLastAvailableData();
-                    return;
-                }
-                
                 showLoading();
                 
                 const endpoint = DSE_API_ENDPOINTS[currentEndpointIndex];
-                document.getElementById('dataSource').textContent = `Source: ${endpoint.name}`;
+                document.getElementById('dataSource').textContent = `Source: DSE ${currentEndpointIndex + 1}`;
                 
-                const response = await fetchWithTimeout(endpoint.url, 8000);
-                const priceData = await handleResponse(response);
+                const response = await fetchWithTimeout(endpoint, 5000);
+                const data = await response.json();
                 
-                // For market closed, use a fallback endpoint that might have EOD data
-                if (!isMarketOpen && (!priceData || priceData.length === 0)) {
-                    const eodResponse = await fetchWithTimeout("https://www.dsebd.org/latest_share_price_all.php", 8000);
-                    const eodData = await handleEODResponse(eodResponse);
-                    if (eodData && eodData.length > 0) {
-                        processMarketData(eodData, {}, 'closed');
-                        return;
-                    }
+                if (!Array.isArray(data)) {
+                    throw new Error("Invalid data format received");
                 }
-
-                if (!Array.isArray(priceData)) {
-                    throw new Error("Invalid price data format");
-                }
-
-                processMarketData(priceData, {}, isMarketOpen ? 'live' : 'closed');
+                
+                processMarketData(data);
+                retryCount = 0;
                 
             } catch (error) {
                 console.error('Error fetching data:', error);
@@ -266,90 +231,56 @@
             }
         }
 
-        function useLastAvailableData() {
-            if (lastSuccessfulData) {
-                allStocks = lastSuccessfulData;
-                updateUI();
-                updateConnectionStatus('closed');
-            } else {
-                showError("No cached data available. Please try again when market is open.");
-                updateConnectionStatus('offline');
-            }
-        }
-
-        function processMarketData(priceData, companyData, status) {
-            const processedData = priceData.map(stock => {
-                if (!stock.trading_code || !stock.ltp) {
-                    console.warn("Invalid stock data:", stock);
-                    return null;
-                }
-                
-                const companyInfo = Array.isArray(companyData) 
-                    ? companyData.find(c => c.trading_code === stock.trading_code) || {}
-                    : companyData[stock.trading_code] || {};
-                
-                const changePercent = parseFloat(stock.change_percent) || 
-                    (stock.ycp ? ((parseFloat(stock.ltp) - parseFloat(stock.ycp)) / parseFloat(stock.ycp) * 100 : 0);
+        function processMarketData(priceData) {
+            allStocks = priceData.map(stock => {
+                const changePercent = stock.change_percent || 
+                    (stock.ycp ? ((stock.ltp - stock.ycp) / stock.ycp * 100) : 0);
                 
                 return {
                     ticker: stock.trading_code,
-                    name: companyInfo.company_name || stock.trading_code,
-                    sector: companyInfo.sector || 'Miscellaneous',
+                    name: stock.trading_code, // Can be enhanced with company names
+                    sector: 'General', // Can be enhanced with actual sectors
                     ltp: parseFloat(stock.ltp) || 0,
                     high: parseFloat(stock.high) || 0,
                     low: parseFloat(stock.low) || 0,
                     close: parseFloat(stock.closep) || 0,
                     ycp: parseFloat(stock.ycp) || 0,
                     change: parseFloat(stock.change) || 0,
-                    changePercent: changePercent,
-                    trade: parseInt(stock.trade) || 0,
+                    changePercent: parseFloat(changePercent) || 0,
                     volume: parseInt(stock.volume) || 0,
-                    value: parseFloat(stock.value) || 0,
-                    pe: parseFloat(stock.pe) || calculatePeRatio(stock),
+                    pe: parseFloat(stock.pe) || 0,
                     score: calculateDynamicScore(stock),
-                    lastUpdated: new Date().toISOString(),
-                    status: status
+                    lastUpdated: new Date().toISOString()
                 };
-            }).filter(stock => stock !== null);
-            
-            allStocks = processedData;
-            lastSuccessfulData = processedData;
-            retryCount = 0;
-            updateUI();
-            updateConnectionStatus(status);
-        }
-
-        async function handleEODResponse(response) {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const text = await response.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(text, "text/html");
-            const rows = doc.querySelectorAll('.table tbody tr');
-            
-            const eodData = [];
-            rows.forEach(row => {
-                const cols = row.querySelectorAll('td');
-                if (cols.length >= 10) {
-                    eodData.push({
-                        trading_code: cols[1].textContent.trim(),
-                        ltp: cols[6].textContent.trim(),
-                        high: cols[7].textContent.trim(),
-                        low: cols[8].textContent.trim(),
-                        closep: cols[6].textContent.trim(), // Use LTP as close price
-                        ycp: cols[5].textContent.trim(),
-                        change: (parseFloat(cols[6].textContent) - parseFloat(cols[5].textContent)).toFixed(2),
-                        change_percent: ((parseFloat(cols[6].textContent) - parseFloat(cols[5].textContent)) / parseFloat(cols[5].textContent) * 100,
-                        trade: cols[9].textContent.trim(),
-                        volume: cols[10].textContent.replace(/,/g, ''),
-                        value: '0',
-                        pe: '0'
-                    });
-                }
             });
             
-            return eodData;
+            lastSuccessfulData = allStocks;
+            updateUI();
+            updateConnectionStatus(isMarketOpen ? 'live' : 'closed');
+        }
+
+        function calculateDynamicScore(stock) {
+            let score = 50; // Base score
+            
+            // Positive factors
+            if (stock.change > 0) score += 15;
+            if (stock.volume > 100000) score += 10;
+            if (stock.changePercent > 2) score += 5;
+            if (stock.pe < 15) score += 10;
+            
+            // Negative factors
+            if (stock.change < -5) score -= 10;
+            if (stock.pe > 25) score -= 5;
+            
+            return Math.max(0, Math.min(100, score));
+        }
+
+        function useLastAvailableData() {
+            if (lastSuccessfulData) {
+                allStocks = lastSuccessfulData;
+                updateUI();
+                updateConnectionStatus('closed');
+            }
         }
 
         function updateConnectionStatus(status) {
@@ -372,7 +303,153 @@
             }
         }
 
-        // ... [rest of the JavaScript functions remain the same as previous implementation] ...
+        function updateUI() {
+            initSectorFilter();
+            filterBySector(currentSector);
+            
+            document.getElementById('loadingPlaceholder').classList.add('hidden');
+            document.getElementById('errorDisplay').classList.add('hidden');
+            document.getElementById('tableView').classList.remove('hidden');
+            document.getElementById('marketStatusBanner').classList.remove('hidden');
+            
+            document.getElementById('lastUpdated').textContent = `Last update: ${new Date().toLocaleTimeString()}`;
+        }
+
+        function showLoading() {
+            document.getElementById('loadingPlaceholder').classList.remove('hidden');
+            document.getElementById('tableView').classList.add('hidden');
+            document.getElementById('errorDisplay').classList.add('hidden');
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorDisplay');
+            errorDiv.classList.remove('hidden');
+            errorDiv.innerHTML = `
+                <div class="flex items-center">
+                    <svg class="h-5 w-5 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    <strong>Error:</strong>
+                </div>
+                <p class="mt-1">${message}</p>
+                <button onclick="forceRetry()" class="mt-2 bg-blue-500 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">
+                    Retry Now
+                </button>
+            `;
+            
+            document.getElementById('loadingPlaceholder').classList.add('hidden');
+            updateConnectionStatus('offline');
+        }
+
+        function forceRetry() {
+            retryCount = 0;
+            fetchStockData();
+        }
+
+        function initSectorFilter() {
+            const sectorContainer = document.getElementById('sectorFilter').querySelector('div');
+            sectorContainer.innerHTML = '';
+            
+            // Simplified sector filtering - can be enhanced with actual sectors
+            const sectors = ['All', 'Bank', 'Pharma', 'Fuel & Power', 'IT'];
+            
+            sectors.forEach(sector => {
+                const btn = document.createElement('button');
+                btn.className = 'sector-btn bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm';
+                btn.textContent = sector;
+                btn.onclick = () => filterBySector(sector === 'All' ? 'all' : sector);
+                sectorContainer.appendChild(btn);
+            });
+            
+            document.getElementById('sectorFilter').classList.remove('hidden');
+        }
+
+        function filterBySector(sector) {
+            currentSector = sector;
+            
+            document.querySelectorAll('.sector-btn').forEach(btn => {
+                btn.classList.remove('active', 'bg-blue-600', 'text-white');
+                btn.classList.add('bg-blue-100', 'text-blue-800');
+            });
+            
+            if (sector === 'all') {
+                filteredStocks = [...allStocks];
+                document.querySelector('.sector-btn').classList.add('active', 'bg-blue-600', 'text-white');
+            } else {
+                filteredStocks = allStocks; // Simplified - would filter by actual sector if data available
+                document.querySelectorAll('.sector-btn').forEach(btn => {
+                    if (btn.textContent === sector) {
+                        btn.classList.add('active', 'bg-blue-600', 'text-white');
+                    }
+                });
+            }
+            
+            renderStockTable();
+        }
+
+        function renderStockTable() {
+            const tbody = document.getElementById('stockTableBody');
+            tbody.innerHTML = '';
+            
+            const sortedStocks = [...filteredStocks].sort((a, b) => {
+                const aVal = a[currentSort.key];
+                const bVal = b[currentSort.key];
+                return currentSort.order === 'asc' ? aVal - bVal : bVal - aVal;
+            });
+            
+            sortedStocks.forEach(stock => {
+                const changeClass = stock.change >= 0 ? 'text-green-600' : 'text-red-600';
+                const peColor = stock.pe < 15 ? 'text-green-600' : stock.pe < 25 ? 'text-yellow-600' : 'text-red-600';
+                const scoreColor = stock.score > 75 ? 'text-green-600' : stock.score > 50 ? 'text-yellow-600' : 'text-red-600';
+                
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50';
+                row.innerHTML = `
+                    <td class="px-4 py-3 whitespace-nowrap font-medium">${stock.ticker}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">${stock.sector}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">${stock.ltp.toFixed(2)}</td>
+                    <td class="px-4 py-3 whitespace-nowrap ${changeClass}">
+                        ${stock.change >= 0 ? '+' : ''}${stock.change.toFixed(2)} (${stock.changePercent.toFixed(2)}%)
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">${stock.volume.toLocaleString()}</td>
+                    <td class="px-4 py-3 whitespace-nowrap ${peColor}">${stock.pe.toFixed(2)}</td>
+                    <td class="px-4 py-3 whitespace-nowrap font-bold ${scoreColor}">${stock.score}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        <button onclick="showStockDetail('${stock.ticker}')" class="text-blue-600 hover:text-blue-800 text-sm">
+                            Analyze
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function sortTable(key) {
+            if (currentSort.key === key) {
+                currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.key = key;
+                currentSort.order = 'desc';
+            }
+            renderStockTable();
+        }
+
+        async function fetchWithTimeout(resource, timeout = 5000) {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+            
+            const response = await fetch(resource, {
+                signal: controller.signal,
+                cache: 'no-store'
+            });
+            clearTimeout(id);
+            return response;
+        }
+
+        function showStockDetail(ticker) {
+            // Implementation for detailed view would go here
+            alert(`Detailed analysis for ${ticker} would appear here`);
+        }
     </script>
 </body>
 </html>
