@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DSE Stock Screener -বাংলাদেশ স্টক মার্কেট বিশ্লেষণ by Adnan Sayem</title>
+    <title>DSE Stock Screener - বাংলাদেশ স্টক মার্কেট বিশ্লেষণ by Adnan Sayem</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -30,15 +30,18 @@
         .sort-desc::after {
             content: " ↓";
         }
-        .chart-container {
-            height: 400px;
-        }
         .bangla-text {
             font-family: 'Helvetica', 'Arial', sans-serif;
         }
-        .tradingview-widget-container {
-            height: 100%;
-            width: 100%;
+        .sector-btn {
+            transition: all 0.2s;
+        }
+        .sector-btn:hover {
+            transform: translateY(-1px);
+        }
+        .sector-btn.active {
+            background-color: #1d4ed8;
+            color: white;
         }
     </style>
 </head>
@@ -55,7 +58,7 @@
                 <h1 class="text-xl font-bold">DSE Stock Screener</h1>
             </div>
             <div>
-                <p class="text-blue-200 text-sm">বাংলাদেশ স্টক মার্কেট বিশ্লেষণ By Adnan Sayem </p>
+                <p class="text-blue-200 text-sm">বাংলাদেশ স্টক মার্কেট বিশ্লেষণ By Adnan Sayem</p>
             </div>
         </div>
     </header>
@@ -67,6 +70,16 @@
             <p class="mt-2 text-gray-500">প্রাথমিক ডেটা লোড হচ্ছে...</p>
         </div>
 
+        <!-- Sector Filter -->
+        <div id="sectorFilter" class="hidden mb-4">
+            <div class="flex flex-wrap gap-2">
+                <button onclick="filterBySector('all')" class="sector-btn active bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                    সব সেক্টর
+                </button>
+                <!-- Filled by JavaScript -->
+            </div>
+        </div>
+
         <!-- Main Table View -->
         <div id="tableView" class="mb-8 hidden">
             <div class="card overflow-hidden mb-4">
@@ -76,11 +89,12 @@
                             <tr>
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('ticker')">Ticker</th>
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('category')">Category</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('currentPrice')">Price (BDT)</th>
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('faceValue')">Face Value</th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('revenueCAGR5Y')">Revenue CAGR 5Y</th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('netProfitCAGR5Y')">Net Profit CAGR 5Y</th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('overvalued52W')">Overvalued 52W</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('marketCap')">Market Cap (Cr.)</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" onclick="sortTable('peRatio')">P/E</th>
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-blue-100" onclick="sortTable('totalScore')">Score</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chart</th>
                             </tr>
                         </thead>
                         <tbody id="stockTableBody" class="bg-white divide-y divide-gray-200">
@@ -130,14 +144,36 @@
                 </div>
             </div>
 
-            <!-- TradingView Chart -->
+            <!-- Investor Information -->
             <div class="card p-4 mb-6">
-                <h3 class="font-medium text-gray-700 mb-3">মূল্য পারফরম্যান্স</h3>
-                <div class="chart-container">
-                    <div class="tradingview-widget-container">
-                        <div id="tradingview-chart" style="height: 100%;"></div>
+                <h3 class="font-medium text-gray-700 mb-3">বিনিয়োগকারীদের জন্য গুরুত্বপূর্ণ তথ্য</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h4 class="font-medium text-gray-600 mb-2">মৌলিক বিশ্লেষণ</h4>
+                        <ul class="list-disc list-inside text-gray-700 space-y-1">
+                            <li>কোম্পানির আর্থিক অবস্থা পর্যালোচনা করুন</li>
+                            <li>ম্যানেজমেন্টের দক্ষতা মূল্যায়ন করুন</li>
+                            <li>শিল্পের প্রবৃদ্ধি সম্ভাবনা বিশ্লেষণ করুন</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="font-medium text-gray-600 mb-2">ঝুঁকি ব্যবস্থাপনা</h4>
+                        <ul class="list-disc list-inside text-gray-700 space-y-1">
+                            <li>বিনিয়োগের আগে ঝুঁকি সহনশীলতা নির্ধারণ করুন</li>
+                            <li>বিভিন্ন সেক্টরে বিনিয়োগ ছড়িয়ে দিন</li>
+                            <li>স্টপ লস ব্যবহার করুন</li>
+                        </ul>
                     </div>
                 </div>
+            </div>
+
+            <!-- TradingView Link -->
+            <div class="card p-4 mb-6">
+                <h3 class="font-medium text-gray-700 mb-3">রিয়েল-টাইম চার্ট বিশ্লেষণ</h3>
+                <p class="text-gray-700 mb-3">এই স্টকটির বর্তমান মূল্য প্রবণতা বিশ্লেষণ করতে TradingView-এ দেখুন:</p>
+                <a id="tradingviewLink" href="#" target="_blank" class="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+                    TradingView চার্ট দেখুন →
+                </a>
             </div>
 
             <!-- Analysis Summary -->
@@ -156,15 +192,13 @@
         </div>
     </footer>
 
-    <!-- TradingView Script (loaded only when needed) -->
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-    
     <script>
         // Global variables
         let allStocks = [];
+        let filteredStocks = [];
         let currentSort = { key: 'totalScore', order: 'desc' };
         let currentStock = null;
-        let tvWidget = null;
+        let currentSector = 'all';
 
         // Initialize the application with lightweight first load
         document.addEventListener('DOMContentLoaded', function() {
@@ -188,13 +222,17 @@
                 // Simulated fast data load (replace with actual API call)
                 allStocks = generateSimulatedData();
                 
-                // Render table immediately
-                renderStockTable();
+                // Initialize sector filter
+                initSectorFilter();
+                
+                // Filter and render table
+                filterBySector(currentSector);
                 updateLastUpdatedTime();
                 
                 // Hide loading and show table
                 document.getElementById('loadingPlaceholder').classList.add('hidden');
                 document.getElementById('tableView').classList.remove('hidden');
+                document.getElementById('sectorFilter').classList.remove('hidden');
                 
             } catch (error) {
                 console.error('Error fetching stock data:', error);
@@ -204,46 +242,109 @@
             }
         }
 
-        // Generate optimized simulated data
+        // Generate optimized simulated data with real DSE sectors and face values
         function generateSimulatedData() {
-            const categories = ['Bank', 'Pharma', 'Telecom', 'Fuel', 'IT', 'Food', 'Insurance', 'Textile'];
-            const faceValues = [10, 100, 50, 20, 10, 100, 10, 50]; // Common face values in BDT
-            
+            const sectors = {
+                'Bank': { faceValue: 10, peRange: [5, 15] },
+                'Pharma': { faceValue: 10, peRange: [15, 30] },
+                'Telecom': { faceValue: 10, peRange: [10, 25] },
+                'Fuel & Power': { faceValue: 10, peRange: [8, 20] },
+                'IT': { faceValue: 10, peRange: [20, 40] },
+                'Food': { faceValue: 100, peRange: [10, 30] },
+                'Insurance': { faceValue: 10, peRange: [5, 15] },
+                'Textile': { faceValue: 10, peRange: [5, 12] },
+                'Engineering': { faceValue: 10, peRange: [5, 15] },
+                'Miscellaneous': { faceValue: 10, peRange: [5, 20] }
+            };
+
             const stocks = [];
             const sampleStocks = [
                 { ticker: 'GP', name: 'গ্রামীণফোন লিমিটেড', category: 'Telecom' },
                 { ticker: 'SQURPHARMA', name: 'স্কয়ার ফার্মাসিউটিক্যালস', category: 'Pharma' },
                 { ticker: 'BATBC', name: 'ব্রিটিশ আমেরিকান টোব্যাকো', category: 'Food' },
-                { ticker: 'ACI', name: 'এসি আই লিমিটেড', category: 'Conglomerate' },
+                { ticker: 'ACI', name: 'এসি আই লিমিটেড', category: 'Pharma' },
                 { ticker: 'BEXIMCO', name: 'বেক্সিমকো লিমিটেড', category: 'Textile' },
                 { ticker: 'RENATA', name: 'রেনাটা লিমিটেড', category: 'Pharma' },
                 { ticker: 'ISLAMIBANK', name: 'ইসলামী ব্যাংক বাংলাদেশ', category: 'Bank' },
-                { ticker: 'SUMITPOWER', name: 'সামিট পাওয়ার', category: 'Power' }
+                { ticker: 'SUMITPOWER', name: 'সামিট পাওয়ার', category: 'Fuel & Power' },
+                { ticker: 'LANKABAFIN', name: 'লাঙ্কাবাংলা ফাইন্যান্স', category: 'Bank' },
+                { ticker: 'OLYMPIC', name: 'অলিম্পিক ইন্ডাস্ট্রিজ', category: 'Food' },
+                { ticker: 'BDTHAI', name: 'বাংলাদেশ থাই অ্যালুমিনিয়াম', category: 'Engineering' },
+                { ticker: 'SALVOCHEM', name: 'সালভো কেমিক্যাল', category: 'Miscellaneous' }
             ];
 
             sampleStocks.forEach((stock, index) => {
-                const categoryIndex = categories.indexOf(stock.category);
-                const faceValue = faceValues[categoryIndex >= 0 ? categoryIndex : 0];
+                const sectorInfo = sectors[stock.category] || sectors['Miscellaneous'];
+                const peRange = sectorInfo.peRange;
+                const peRatio = (Math.random() * (peRange[1] - peRange[0]) + peRange[0]).toFixed(2);
+                const faceValue = sectorInfo.faceValue;
+                const currentPrice = (Math.random() * 500 + 50).toFixed(2);
+                const sharesOutstanding = Math.floor(Math.random() * 50 + 5) * 1000000; // 5M to 55M shares
+                const marketCap = (currentPrice * sharesOutstanding / 10000000).toFixed(2); // In Crore BDT
                 
                 stocks.push({
                     ...stock,
                     faceValue: faceValue,
+                    currentPrice: parseFloat(currentPrice),
+                    marketCap: parseFloat(marketCap),
+                    sharesOutstanding: sharesOutstanding,
                     revenueCAGR5Y: (Math.random() * 25 - 5).toFixed(2),
                     netProfitCAGR5Y: (Math.random() * 30 - 5).toFixed(2),
-                    overvalued52W: (Math.random() * 60 - 30).toFixed(2),
-                    freeFloatMarketCap: (Math.random() * 500 + 50).toFixed(2),
+                    peRatio: parseFloat(peRatio),
+                    pbRatio: (Math.random() * 5 + 0.5).toFixed(2),
                     roe: (Math.random() * 30 + 5).toFixed(2),
                     roce: (Math.random() * 35 + 5).toFixed(2),
                     debtToEquity: (Math.random() * 2).toFixed(2),
-                    peRatio: (Math.random() * 40 + 5).toFixed(2),
-                    pbRatio: (Math.random() * 5 + 0.5).toFixed(2),
+                    dividendYield: (Math.random() * 8).toFixed(2),
                     directorHoldings: (Math.random() * 80 + 10).toFixed(2),
-                    totalScore: Math.floor(Math.random() * 100 + 50),
-                    lastPrice: (Math.random() * 500 + 50).toFixed(2)
+                    totalScore: Math.floor(Math.random() * 100 + 50)
                 });
             });
 
             return stocks;
+        }
+
+        // Initialize sector filter buttons
+        function initSectorFilter() {
+            const sectorContainer = document.getElementById('sectorFilter').querySelector('div');
+            
+            // Get all unique sectors
+            const sectors = [...new Set(allStocks.map(stock => stock.category))];
+            
+            // Add sector buttons
+            sectors.forEach(sector => {
+                const btn = document.createElement('button');
+                btn.className = 'sector-btn bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm';
+                btn.textContent = sector;
+                btn.onclick = () => filterBySector(sector);
+                sectorContainer.appendChild(btn);
+            });
+        }
+
+        // Filter stocks by sector
+        function filterBySector(sector) {
+            currentSector = sector;
+            
+            // Update active button
+            document.querySelectorAll('.sector-btn').forEach(btn => {
+                btn.classList.remove('active', 'bg-blue-600', 'text-white');
+                btn.classList.add('bg-blue-100', 'text-blue-800');
+            });
+            
+            if (sector === 'all') {
+                filteredStocks = [...allStocks];
+                document.querySelector('.sector-btn').classList.add('active', 'bg-blue-600', 'text-white');
+            } else {
+                filteredStocks = allStocks.filter(stock => stock.category === sector);
+                document.querySelectorAll('.sector-btn').forEach(btn => {
+                    if (btn.textContent === sector) {
+                        btn.classList.add('active', 'bg-blue-600', 'text-white');
+                        btn.classList.remove('bg-blue-100', 'text-blue-800');
+                    }
+                });
+            }
+            
+            renderStockTable();
         }
 
         // Render the main stock table (optimized)
@@ -252,7 +353,7 @@
             if (!tbody) return;
 
             // Sort stocks
-            const sortedStocks = [...allStocks].sort((a, b) => {
+            const sortedStocks = [...filteredStocks].sort((a, b) => {
                 const aVal = a[currentSort.key];
                 const bVal = b[currentSort.key];
                 
@@ -265,19 +366,22 @@
             let html = '';
             
             sortedStocks.forEach(stock => {
-                const revenueColor = stock.revenueCAGR5Y > 10 ? 'text-green-600' : stock.revenueCAGR5Y > 0 ? 'text-yellow-600' : 'text-red-600';
-                const profitColor = stock.netProfitCAGR5Y > 10 ? 'text-green-600' : stock.netProfitCAGR5Y > 0 ? 'text-yellow-600' : 'text-red-600';
-                const overvaluedColor = stock.overvalued52W > 20 ? 'text-red-600' : stock.overvalued52W > 0 ? 'text-yellow-600' : 'text-green-600';
+                const peColor = stock.peRatio < 10 ? 'text-green-600' : stock.peRatio < 20 ? 'text-yellow-600' : 'text-red-600';
                 
                 html += `
-                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="showStockDetail('${stock.ticker}')">
+                    <tr class="hover:bg-gray-50">
                         <td class="px-4 py-3 whitespace-nowrap font-medium">${stock.ticker}</td>
                         <td class="px-4 py-3 whitespace-nowrap">${stock.category}</td>
+                        <td class="px-4 py-3 whitespace-nowrap">${stock.currentPrice.toFixed(2)}</td>
                         <td class="px-4 py-3 whitespace-nowrap">${stock.faceValue}</td>
-                        <td class="px-4 py-3 whitespace-nowrap ${revenueColor}">${stock.revenueCAGR5Y}%</td>
-                        <td class="px-4 py-3 whitespace-nowrap ${profitColor}">${stock.netProfitCAGR5Y}%</td>
-                        <td class="px-4 py-3 whitespace-nowrap ${overvaluedColor}">${stock.overvalued52W}%</td>
+                        <td class="px-4 py-3 whitespace-nowrap">${stock.marketCap.toFixed(2)}</td>
+                        <td class="px-4 py-3 whitespace-nowrap ${peColor}">${stock.peRatio.toFixed(2)}</td>
                         <td class="px-4 py-3 whitespace-nowrap font-bold bg-blue-50">${stock.totalScore}</td>
+                        <td class="px-4 py-3 whitespace-nowrap">
+                            <button onclick="showStockDetail('${stock.ticker}')" class="text-blue-600 hover:text-blue-800 text-sm">
+                                বিশ্লেষণ দেখুন
+                            </button>
+                        </td>
                     </tr>
                 `;
             });
@@ -320,16 +424,16 @@
                     <span class="font-medium">${currentStock.category}</span>
                 </div>
                 <div class="flex justify-between">
+                    <span class="text-gray-600">বর্তমান মূল্য:</span>
+                    <span class="font-medium">${currentStock.currentPrice.toFixed(2)} TK</span>
+                </div>
+                <div class="flex justify-between">
                     <span class="text-gray-600">ফেস ভ্যালু:</span>
                     <span class="font-medium">${currentStock.faceValue} TK</span>
                 </div>
                 <div class="flex justify-between">
-                    <span class="text-gray-600">ফ্রি ফ্লোট বাজারমূল্য:</span>
-                    <span class="font-medium">${parseFloat(currentStock.freeFloatMarketCap).toFixed(2)}M</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">পরিচালকদের মালিকানা:</span>
-                    <span class="font-medium">${currentStock.directorHoldings}%</span>
+                    <span class="text-gray-600">বাজার মূলধন:</span>
+                    <span class="font-medium">${currentStock.marketCap.toFixed(2)} Crore</span>
                 </div>
             `;
 
@@ -344,12 +448,12 @@
                     <span class="font-medium ${currentStock.netProfitCAGR5Y > 10 ? 'text-green-600' : 'text-red-600'}">${currentStock.netProfitCAGR5Y}%</span>
                 </div>
                 <div class="flex justify-between">
-                    <span class="text-gray-600">৫২ সপ্তাহের সর্বনিম্ন থেকে:</span>
-                    <span class="font-medium ${currentStock.overvalued52W > 20 ? 'text-red-600' : 'text-green-600'}">${currentStock.overvalued52W}%</span>
-                </div>
-                <div class="flex justify-between">
                     <span class="text-gray-600">ROE:</span>
                     <span class="font-medium">${currentStock.roe}%</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">ROCE:</span>
+                    <span class="font-medium">${currentStock.roce}%</span>
                 </div>
             `;
 
@@ -357,7 +461,7 @@
             document.getElementById('valuationMetrics').innerHTML = `
                 <div class="flex justify-between">
                     <span class="text-gray-600">P/E Ratio:</span>
-                    <span class="font-medium">${currentStock.peRatio}</span>
+                    <span class="font-medium ${currentStock.peRatio < 15 ? 'text-green-600' : 'text-red-600'}">${currentStock.peRatio.toFixed(2)}</span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-gray-600">P/B Ratio:</span>
@@ -365,72 +469,48 @@
                 </div>
                 <div class="flex justify-between">
                     <span class="text-gray-600">মূল্য/ফেস ভ্যালু:</span>
-                    <span class="font-medium">${(currentStock.lastPrice / currentStock.faceValue).toFixed(2)}x</span>
+                    <span class="font-medium">${(currentStock.currentPrice / currentStock.faceValue).toFixed(2)}x</span>
                 </div>
                 <div class="flex justify-between">
-                    <span class="text-gray-600">মোট স্কোর:</span>
-                    <span class="font-medium">${currentStock.totalScore}</span>
+                    <span class="text-gray-600">ডিভিডেন্ড ফলন:</span>
+                    <span class="font-medium">${currentStock.dividendYield}%</span>
                 </div>
             `;
 
+            // Update TradingView link
+            document.getElementById('tradingviewLink').href = `https://www.tradingview.com/chart/?symbol=DHAKA:${currentStock.ticker}`;
+            
             // Update analysis summary
             updateAnalysisSummary();
-            
-            // Load TradingView chart (only when needed)
-            loadTradingViewChart(currentStock.ticker + ':DHAKA');
-        }
-
-        // Load TradingView widget
-        function loadTradingViewChart(symbol) {
-            if (tvWidget) {
-                tvWidget.remove();
-            }
-            
-            tvWidget = new TradingView.widget({
-                autosize: true,
-                symbol: symbol,
-                interval: "D",
-                timezone: "Asia/Dhaka",
-                theme: "light",
-                style: "1",
-                locale: "en",
-                toolbar_bg: "#f1f3f6",
-                enable_publishing: false,
-                allow_symbol_change: true,
-                container_id: "tradingview-chart"
-            });
         }
 
         // Update analysis summary in Bangla
         function updateAnalysisSummary() {
             let summary = '';
             
-            // Revenue growth analysis
-            if (currentStock.revenueCAGR5Y > 15) {
-                summary += `<p class="mb-2">এই কোম্পানির আয় ৫ বছরে গড়ে ${currentStock.revenueCAGR5Y}% হারে বৃদ্ধি পেয়েছে, যা অত্যন্ত শক্তিশালী গ্রোথ নির্দেশ করে।</p>`;
-            } else if (currentStock.revenueCAGR5Y > 5) {
-                summary += `<p class="mb-2">আয়ের গ্রোথ মাঝারি পর্যায়ের (৫ বছরে গড়ে ${currentStock.revenueCAGR5Y}%), যা স্থিতিশীল ব্যবসা নির্দেশ করে।</p>`;
+            // Valuation analysis
+            const sectorPE = getSectorAveragePE(currentStock.category);
+            if (currentStock.peRatio < sectorPE * 0.7) {
+                summary += `<p class="mb-2">এই স্টকটি ${currentStock.category} সেক্টরের গড় P/E (${sectorPE.toFixed(2)}) এর তুলনায় কম মূল্যায়নে (${currentStock.peRatio.toFixed(2)}) লেনদেন হচ্ছে।</p>`;
+            } else if (currentStock.peRatio > sectorPE * 1.3) {
+                summary += `<p class="mb-2 text-red-600">সতর্কতা: এই স্টকটি ${currentStock.category} সেক্টরের গড় P/E (${sectorPE.toFixed(2)}) এর তুলনায় বেশি মূল্যায়নে (${currentStock.peRatio.toFixed(2)}) লেনদেন হচ্ছে।</p>`;
             } else {
-                summary += `<p class="mb-2">আয়ের গ্রোথ দুর্বল (৫ বছরে গড়ে ${currentStock.revenueCAGR5Y}%), যা চিন্তার কারণ হতে পারে।</p>`;
+                summary += `<p class="mb-2">এই স্টকটি ${currentStock.category} সেক্টরের গড় P/E (${sectorPE.toFixed(2)}) এর কাছাকাছি মূল্যায়নে (${currentStock.peRatio.toFixed(2)}) লেনদেন হচ্ছে।</p>`;
             }
             
-            // Profit growth analysis
-            if (currentStock.netProfitCAGR5Y > 20) {
-                summary += `<p class="mb-2">নিট লাভের গ্রোথ অসাধারণ (৫ বছরে গড়ে ${currentStock.netProfitCAGR5Y}%), যা কোম্পানির লাভজনকতা দেখায়।</p>`;
+            // Growth analysis
+            if (currentStock.revenueCAGR5Y > 15 && currentStock.netProfitCAGR5Y > 15) {
+                summary += `<p class="mb-2">কোম্পানিটির আয় ও মুনাফা উভয়ই শক্তিশালী হারে (${currentStock.revenueCAGR5Y}% ও ${currentStock.netProfitCAGR5Y}%) বৃদ্ধি পাচ্ছে।</p>`;
             } else if (currentStock.netProfitCAGR5Y > currentStock.revenueCAGR5Y) {
-                summary += `<p class="mb-2">নিট লাভের গ্রোথ (${currentStock.netProfitCAGR5Y}%) আয়ের গ্রোথকে ছাড়িয়ে গেছে, যা অপারেশনাল দক্ষতা নির্দেশ করে।</p>`;
-            } else {
-                summary += `<p class="mb-2">নিট লাভের গ্রোথ (${currentStock.netProfitCAGR5Y}%) উন্নতির সুযোগ রাখে।</p>`;
+                summary += `<p class="mb-2">মুনাফার বৃদ্ধি (${currentStock.netProfitCAGR5Y}%) আয়ের বৃদ্ধি (${currentStock.revenueCAGR5Y}%) কে ছাড়িয়ে গেছে, যা দক্ষতা বৃদ্ধি নির্দেশ করে।</p>`;
             }
             
             // Face value analysis
-            const priceToFaceValue = (currentStock.lastPrice / currentStock.faceValue).toFixed(2);
+            const priceToFaceValue = (currentStock.currentPrice / currentStock.faceValue).toFixed(2);
             if (priceToFaceValue > 10) {
                 summary += `<p class="mb-2">স্টকটি ফেস ভ্যালুর ${priceToFaceValue}x মূল্যে লেনদেন হচ্ছে, যা উচ্চ মূল্যায়ন নির্দেশ করতে পারে।</p>`;
-            } else if (priceToFaceValue > 3) {
-                summary += `<p class="mb-2">ফেস ভ্যালুর ${priceToFaceValue}x মূল্যে লেনদেন হচ্ছে, যা যুক্তিসঙ্গত পর্যায়ে আছে।</p>`;
-            } else {
-                summary += `<p class="mb-2">ফেস ভ্যালুর ${priceToFaceValue}x মূল্যে লেনদেন হচ্ছে, যা আকর্ষণীয় মূল্যায়ন নির্দেশ করে।</p>`;
+            } else if (priceToFaceValue < 3) {
+                summary += `<p class="mb-2">স্টকটি ফেস ভ্যালুর ${priceToFaceValue}x মূল্যে লেনদেন হচ্ছে, যা আকর্ষণীয় মূল্যায়ন নির্দেশ করে।</p>`;
             }
             
             // Final recommendation
@@ -445,12 +525,17 @@
             document.getElementById('analysisSummary').innerHTML = summary;
         }
 
+        // Get sector average PE
+        function getSectorAveragePE(sector) {
+            const sectorStocks = allStocks.filter(stock => stock.category === sector);
+            if (sectorStocks.length === 0) return 15; // Default average
+            
+            const totalPE = sectorStocks.reduce((sum, stock) => sum + stock.peRatio, 0);
+            return totalPE / sectorStocks.length;
+        }
+
         // Show the table view
         function showTableView() {
-            if (tvWidget) {
-                tvWidget.remove();
-                tvWidget = null;
-            }
             document.getElementById('tableView').classList.remove('hidden');
             document.getElementById('detailView').classList.add('hidden');
         }
